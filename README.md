@@ -133,3 +133,53 @@ Requests, query parameters, frequency constraints, and response fields were chec
 uv run python -m unittest -v tests.test_market_data
 uv run python -m unittest discover -s tests -t . -v
 ```
+
+## Analytics foundation
+
+The `analytics` command calculates three indicators from Schwab historical
+candles. Use a comma-separated `--fields` argument to select metrics:
+
+```bash
+uv run schwab analytics market SPY --fields rsi_14,atr_14,vwap_session
+uv run schwab analytics market SPX --fields rsi_20,atr_20
+```
+
+Results are one JSON object containing `symbol`, `metrics` (mapping field names
+to numeric values), `as_of` (latest input timestamp per metric, in Unix ms),
+and `sources` (`daily` or `intraday`). This stable Python-friendly structure
+is intentionally the main interface; no presentation table is provided.
+
+The calculation API is importable without executing the CLI:
+
+```python
+from schwab_cli.analytics_service import calculate_market
+
+result = calculate_market("SPY", "rsi_14,atr_14")
+rsi_value = result["metrics"]["rsi_14"]
+```
+
+`rsi_N` uses Wilder's smoothing over N close-to-close changes, with a
+simple-average initial seed. `atr_N` uses Wilder's smoothed true range over N
+bars, treating the first supplied bar's high-low as its initial true range.
+These indicators are based on daily candles and benefit from adequate warmup
+history. Insufficient data and invalid values cause explicit errors, not silently
+estimated values.
+
+`vwap_session` uses one-minute OHLCV candles from the most recent available
+US/Eastern regular session (09:30 to 16:00). It is **typical-price bar VWAP**,
+not trade-level VWAP. Extended-hours data is excluded and total session volume
+must be positive. The reported `as_of` timestamp is the last eligible bar.
+Days without available regular-session bars raise an error.
+
+`analytics market` accepts a market symbol, not a position. Existing
+positions continue to be identified by their local UUID. Schwab reports an
+aggregate instrument holding for a given asset type and symbol: quantity
+changes from additional lots retain the same active UUID, while completely
+closed positions are retired and receive a new UUID when reopened. Separate
+order-tracking UUIDs are never substituted for active position IDs.
+
+To run the focused tests:
+
+```bash
+uv run python -m unittest -v tests.test_analytics
+```
