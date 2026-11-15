@@ -217,6 +217,7 @@ def dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "options" and args.options_command == "chain":
         import json
+        from itertools import islice
         from .market_data import get_option_chain, iter_option_contracts
 
         if args.limit < 0:
@@ -232,7 +233,7 @@ def dispatch(args: argparse.Namespace) -> int:
             print(f"{chain.get('symbol', args.symbol)}  "
                   f"Underlying:{chain.get('underlyingPrice', '-')}  "
                   f"Delayed:{chain.get('isDelayed', '-')}")
-            for side, expiration, strike, contract in list(iter_option_contracts(chain))[:args.limit]:
+            for side, expiration, strike, contract in islice(iter_option_contracts(chain), args.limit):
                 print(f"{side:4} {expiration:17} {strike:>8}  "
                       f"Bid:{contract.get('bidPrice', '-')}  "
                       f"Ask:{contract.get('askPrice', '-')}  "
@@ -247,7 +248,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return dispatch(args)
-    except CommandError as exc:
+    except (CommandError, ValueError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
         return 1
 
