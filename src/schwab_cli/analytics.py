@@ -98,7 +98,7 @@ def atr(candles: list[dict[str, Any]], period: int = 14) -> float:
 
 
 def session_vwap(candles: list[dict[str, Any]]) -> float:
-    """Latest completed regular-session bar VWAP using typical-price approximation.
+    """Most recent available regular-session bar VWAP using typical-price approximation.
 
     Schwab minute OHLCV bars represent volume at a range of prices, so this is
     NOT trade-level VWAP. Session boundaries use US/Eastern, 09:30-16:00.
