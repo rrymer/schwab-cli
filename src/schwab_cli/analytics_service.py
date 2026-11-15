@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from .analytics import atr, rsi, session_vwap, session_last_timestamp
+from .analytics import atr, rsi, session_vwap, session_last_timestamp, to_frame
 from .field_selection import parse_fields
 from .market_data import get_price_history
 
@@ -54,7 +54,7 @@ def calculate_market(
         raise ValueError("Symbol must not be empty")
     resolved = {name: resolve_metric(name) for name in names}
     loader = history_loader or get_price_history
-    candles_by_source: dict[str, list[dict[str, Any]]] = {}
+    candles_by_source: dict[str, Any] = {}
     for source, _ in resolved.values():
         if source in candles_by_source:
             continue
@@ -67,7 +67,7 @@ def calculate_market(
         candles = response.get("candles")
         if not isinstance(candles, list) or not candles:
             raise ValueError(f"No {source} history available for {normalized}")
-        candles_by_source[source] = candles
+        candles_by_source[source] = to_frame(candles)
 
     values: dict[str, float] = {}
     as_of: dict[str, int] = {}
@@ -83,6 +83,6 @@ def calculate_market(
             value = session_vwap(candles)
         values[name] = value
         as_of[name] = (session_last_timestamp(candles)
-                       if name == "vwap_session" else candles[-1]["datetime"])
+                       if name == "vwap_session" else int(candles["datetime"].iloc[-1]))
         sources[name] = source
     return {"symbol": normalized, "metrics": values, "as_of": as_of, "sources": sources}
