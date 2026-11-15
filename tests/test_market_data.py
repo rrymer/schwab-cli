@@ -73,6 +73,14 @@ class MarketDataTests(unittest.TestCase):
         with patch.object(market_data, "_get", return_value={"expirationList": []}):
             self.assertIsNone(market_data.nearest_expiration("SPX"))
 
+    def test_schwab_spx_symbol_is_normalized(self):
+        self.assertEqual(market_data._symbol("SPX"), "$SPX")
+        self.assertEqual(market_data._symbol("$SPX.X"), "$SPX")
+        self.assertEqual(market_data._symbol("$SPX"), "$SPX")
+        with patch.object(market_data, "_get", return_value={"putExpDateMap": {}}) as request:
+            market_data.get_option_chain("SPX", contract_type="PUT", strike_count=5)
+        self.assertEqual(request.call_args.args[1]["symbol"], "$SPX")
+
     def test_chain_query_parameters(self):
         with patch.object(market_data, "_get", return_value={"callExpDateMap": {}, "putExpDateMap": {}}) as request:
             market_data.get_option_chain("spy", contract_type="PUT", from_date="2026-12-01",
