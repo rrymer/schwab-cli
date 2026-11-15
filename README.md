@@ -8,7 +8,7 @@ Local command-line interface for the Charles Schwab Trader API.
 - macOS with Keychain credentials configured for Schwab OAuth
 - An HTTPS local callback configured for `https://127.0.0.1/callback` when using `schwab auth login`
 
-The package uses the Python standard library at runtime. Installation requires a build backend (Hatchling), which your package installer obtains from `pyproject.toml`. You do **not** need to install `requests`, `pytest`, or `setup.py`.
+The CLI uses the Python standard library for its Schwab API and account operations; the analytics module uses **NumPy and pandas**. `uv sync` installs declared dependencies into the project environment. A build backend (Hatchling) is obtained automatically from `pyproject.toml`. You do **not** need to install `requests`, `pytest`, or `setup.py`.
 
 ## Install for development (recommended)
 
@@ -149,13 +149,19 @@ to numeric values), `as_of` (latest input timestamp per metric, in Unix ms),
 and `sources` (`daily` or `intraday`). This stable Python-friendly structure
 is intentionally the main interface; no presentation table is provided.
 
-The calculation API is importable without executing the CLI:
+The calculation API is importable without executing the CLI. The Schwab candle JSON is normalized into a **pandas DataFrame** once per data source; indicator functions use **NumPy** internally:
 
 ```python
 from schwab_cli.analytics_service import calculate_market
 
 result = calculate_market("SPY", "rsi_14,atr_14")
 rsi_value = result["metrics"]["rsi_14"]
+
+from schwab_cli.analytics import to_frame, rsi
+from schwab_cli.market_data import get_price_history
+
+frame = to_frame(get_price_history("SPY")["candles"])
+value = rsi(frame, period=14)
 ```
 
 `rsi_N` uses Wilder's smoothing over N close-to-close changes, with a
@@ -183,3 +189,5 @@ To run the focused tests:
 ```bash
 uv run python -m unittest -v tests.test_analytics
 ```
+
+Because NumPy and pandas are newly declared dependencies, run `uv lock` and commit the updated `uv.lock` before merging this branch. Then `uv sync` installs the locked versions.
