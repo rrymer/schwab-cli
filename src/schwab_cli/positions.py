@@ -18,7 +18,7 @@ def _fmt(value: Any, digits: int = 2) -> str:
 
 
 def list_positions(*, account: str | None = None, as_json: bool = False) -> None:
-    accounts = get_positions(account=account)
+    accounts = get_positions()
     # Reconcile only after a successful complete API response.
     if len(accounts) != 1:
         raise ValueError('Expected exactly one account snapshot')
