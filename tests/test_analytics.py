@@ -30,15 +30,25 @@ def daily(closes):
 
 
 class IndicatorTests(unittest.TestCase):
+    def test_candle_data_frame_structure(self):
+        frame = analytics.to_frame(daily([100, 101, 102]))
+        import pandas as pd
+        import numpy as np
+        self.assertIsInstance(frame, pd.DataFrame)
+        self.assertTrue(np.issubdtype(frame["datetime"].dtype, np.integer))
+        self.assertEqual(frame["close"].tolist(), [100, 101, 102])
+        with self.assertRaisesRegex(ValueError, "timestamps"):
+            analytics.to_frame(list(reversed(daily([100, 101, 102]))))
+
     def test_rsi_wilder_monotonic_and_flat(self):
-        self.assertEqual(analytics.rsi(daily([100 + i for i in range(20)])), 100)
-        self.assertEqual(analytics.rsi(daily([100 - i for i in range(20)])), 0)
-        self.assertEqual(analytics.rsi(daily([100] * 20)), 50)
+        self.assertEqual(analytics.rsi(analytics.to_frame(daily([100 + i for i in range(20)]))), 100)
+        self.assertEqual(analytics.rsi(analytics.to_frame(daily([100 - i for i in range(20)]))), 0)
+        self.assertEqual(analytics.rsi(analytics.to_frame(daily([100] * 20))), 50)
 
     def test_rsi_wilder_smoothed_reference(self):
         # RSI(2), first changes +2,-1 -> avg gain=1, avg loss=.5;
         # next change +2 -> avg gain=1.5, avg loss=.25; RSI=85.7142857.
-        result = analytics.rsi(daily([10, 12, 11, 13]), period=2)
+        result = analytics.rsi(analytics.to_frame(daily([10, 12, 11, 13])), period=2)
         self.assertAlmostEqual(result, 100.0 - 100.0 / 7.0)
 
     def test_atr_true_range_includes_previous_close(self):
@@ -48,19 +58,19 @@ class IndicatorTests(unittest.TestCase):
             candle(172800000, 20, high=22, low=19),
         ]
         # First TR 2; second TR 11; seed 6.5; third TR 3; Wilder -> 4.75
-        self.assertAlmostEqual(analytics.atr(candles, 2), 4.75)
+        self.assertAlmostEqual(analytics.atr(analytics.to_frame(candles), 2), 4.75)
 
     def test_not_enough_candles_and_bad_inputs(self):
         with self.assertRaises(ValueError):
-            analytics.rsi(daily([10] * 14), 14)
+            analytics.rsi(analytics.to_frame(daily([10] * 14)), 14)
         with self.assertRaises(ValueError):
-            analytics.atr(daily([10]), 14)
+            analytics.atr(analytics.to_frame(daily([10])), 14)
         with self.assertRaises(ValueError):
-            analytics.rsi(daily([10, 11]), 0)
+            analytics.rsi(analytics.to_frame(daily([10, 11])), 0)
         with self.assertRaises(ValueError):
-            analytics.rsi(list(reversed(daily([10, 11, 12]))), 2)
+            analytics.rsi(analytics.to_frame(list(reversed(daily([10, 11, 12])))), 2)
         with self.assertRaises(ValueError):
-            analytics.atr([candle(0, 10, high=9, low=11)], 1)
+            analytics.atr(analytics.to_frame([candle(0, 10, high=9, low=11)]), 1)
 
     def test_session_vwap_resets_excludes_pre_post_and_respects_dst(self):
         # Friday 2026-11-13 and Monday 2026-11-16 use UTC-5.
@@ -71,8 +81,8 @@ class IndicatorTests(unittest.TestCase):
             candle(stamp(2026, 11, 16, 15, 0), 110, volume=30),
             candle(stamp(2026, 11, 16, 21, 30), 900, volume=900),  # after-hours excluded
         ]
-        self.assertAlmostEqual(analytics.session_vwap(bars), 107.5)
-        self.assertEqual(analytics.session_last_timestamp(bars), bars[3]["datetime"])
+        self.assertAlmostEqual(analytics.session_vwap(analytics.to_frame(bars)), 107.5)
+        self.assertEqual(analytics.session_last_timestamp(analytics.to_frame(bars)), bars[3]["datetime"])
 
     def test_session_vwap_daylight_saving_market_open(self):
         # July open is 13:30 UTC (09:30 EDT); 13:00 UTC is premarket.
@@ -81,11 +91,11 @@ class IndicatorTests(unittest.TestCase):
             candle(stamp(2026, 7, 6, 13, 30), 100, volume=10),
             candle(stamp(2026, 7, 6, 14, 0), 110, volume=10),
         ]
-        self.assertAlmostEqual(analytics.session_vwap(bars), 105)
+        self.assertAlmostEqual(analytics.session_vwap(analytics.to_frame(bars)), 105)
 
     def test_session_vwap_zero_volume_rejected(self):
         with self.assertRaisesRegex(ValueError, "volume"):
-            analytics.session_vwap([candle(stamp(2026, 11, 16, 14, 30), 100, volume=0)])
+            analytics.session_vwap(analytics.to_frame([candle(stamp(2026, 11, 16, 14, 30), 100, volume=0)]))
 
 
 class ServiceTests(unittest.TestCase):
