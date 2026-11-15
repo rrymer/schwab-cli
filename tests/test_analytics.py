@@ -74,6 +74,15 @@ class IndicatorTests(unittest.TestCase):
         self.assertAlmostEqual(analytics.session_vwap(bars), 107.5)
         self.assertEqual(analytics.session_last_timestamp(bars), bars[3]["datetime"])
 
+    def test_session_vwap_daylight_saving_market_open(self):
+        # July open is 13:30 UTC (09:30 EDT); 13:00 UTC is premarket.
+        bars = [
+            candle(stamp(2026, 7, 6, 13, 0), 900, volume=100),
+            candle(stamp(2026, 7, 6, 13, 30), 100, volume=10),
+            candle(stamp(2026, 7, 6, 14, 0), 110, volume=10),
+        ]
+        self.assertAlmostEqual(analytics.session_vwap(bars), 105)
+
     def test_session_vwap_zero_volume_rejected(self):
         with self.assertRaisesRegex(ValueError, "volume"):
             analytics.session_vwap([candle(stamp(2026, 11, 16, 14, 30), 100, volume=0)])
