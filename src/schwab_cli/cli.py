@@ -246,9 +246,11 @@ def dispatch(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    from .api import SchwabAPIError
+    from .auth import AuthError
     try:
         return dispatch(args)
-    except (CommandError, ValueError) as exc:
+    except (CommandError, ValueError, SchwabAPIError, AuthError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
         return 1
 
