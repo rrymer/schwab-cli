@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 from .api import get_positions
-from .position_store import PositionStore
+from .store import PositionStore
 
 
 def monitor(*, position_id: str | None = None, interval: float = 15.0, once: bool = False) -> None:
