@@ -89,6 +89,40 @@ uv run schwab options chain SPX --type PUT --strike-count 5 --limit 10
 uv run schwab options chain SPX --from-date 2026-12-01 --to-date 2026-12-31 --json
 ```
 
+### Select arbitrary response fields
+
+Use `--fields` with comma-separated, case-sensitive property names to extract
+only the columns you need from the API data. No special query syntax or optional
+dependencies are needed.
+
+```bash
+uv run schwab options chain '$SPX' --type PUT --strike-count 5 \
+  --fields expirationDate,strikePrice,volatility,delta,openInterest --limit 10
+
+uv run schwab market history AAPL --fields datetime,open,high,low,close,volume --limit 5
+
+uv run schwab options expirations '$SPX' --fields expirationDate,daysToExpiration
+```
+
+Output is **CSV on standard output**, including a header, so it can be saved or
+piped into other tools:
+
+```bash
+uv run schwab options chain '$SPX' --type PUT --strike-count 5 \
+  --fields strikePrice,volatility,delta > spx-puts.csv
+```
+
+For option chains, field names come from each option contract object. Three
+additional context fields are available: `side` (`CALL`/`PUT`),
+`expirationKey` (the Schwab map key), and `strikeKey`.
+Any absent field produces an empty CSV cell. Column order matches `--fields`,
+and the existing `--limit` is respected. This is a projection of **returned
+data**, not server-side filtering. `--fields` and `--json` are mutually
+exclusive; `--json` continues to return the entire raw API response.
+
+The history endpoint contains OHLCV candles rather than historical option
+implied volatility. To extract `volatility`, request an option chain.
+
 By default, history displays the last ten returned candles; chain displays the first 20 contracts. `--json` prints the full raw API response for downstream processing. History timestamps are epoch milliseconds; date arguments are interpreted as UTC calendar dates. Zero-DTE expirations are excluded from the concise expiration list unless `--include-0dte` is specified.
 
 Python library entry points live in `schwab_cli.market_data`: `get_price_history`, `get_option_expirations`, `nearest_expiration`, `get_option_chain`, and `iter_option_contracts`. These are read-only and have no pandas dependency.
