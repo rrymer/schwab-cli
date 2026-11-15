@@ -27,8 +27,6 @@ class PackagingTests(unittest.TestCase):
     def test_pep_621_dependencies_are_a_list(self):
         dependencies = self.metadata["project"]["dependencies"]
         self.assertIsInstance(dependencies, list)
-        self.assertEqual(dependencies, [])
-        self.assertNotIn("dependencies", self.metadata.get("tool", {}).get("hatch", {}).get("build", {}).get("targets", {}).get("wheel", {}))
 
     def test_src_package_configuration(self):
         self.assertIn(

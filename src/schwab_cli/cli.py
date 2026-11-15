@@ -95,14 +95,18 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--end", help="UTC end date YYYY-MM-DD")
     history.add_argument("--extended-hours", action="store_true")
     history.add_argument("--limit", type=int, default=10, help="Display last N candles")
-    history.add_argument("--json", action="store_true", help="Print the complete API response")
+    history_output = history.add_mutually_exclusive_group()
+    history_output.add_argument("--json", action="store_true", help="Print the complete API response")
+    history_output.add_argument("--fields", help="Comma-separated candle fields to print as CSV")
 
     options = commands.add_parser("options", help="Read option chain data")
     option_commands = options.add_subparsers(dest="options_command", required=True)
     expirations = option_commands.add_parser("expirations", help="List contract expirations")
     expirations.add_argument("symbol")
     expirations.add_argument("--include-0dte", action="store_true")
-    expirations.add_argument("--json", action="store_true")
+    expiration_output = expirations.add_mutually_exclusive_group()
+    expiration_output.add_argument("--json", action="store_true")
+    expiration_output.add_argument("--fields", help="Comma-separated expiration fields to print as CSV")
     chain = option_commands.add_parser("chain", help="Retrieve an option chain")
     chain.add_argument("symbol")
     chain.add_argument("--type", choices=("CALL", "PUT", "ALL"), default="ALL", dest="contract_type")
@@ -110,7 +114,9 @@ def build_parser() -> argparse.ArgumentParser:
     chain.add_argument("--to-date", help="Last expiration YYYY-MM-DD")
     chain.add_argument("--strike-count", type=int, help="Number of strikes around ATM")
     chain.add_argument("--limit", type=int, default=20, help="Display up to N contracts")
-    chain.add_argument("--json", action="store_true", help="Print the complete API response")
+    chain_output = chain.add_mutually_exclusive_group()
+    chain_output.add_argument("--json", action="store_true", help="Print the complete API response")
+    chain_output.add_argument("--fields", help="Comma-separated contract fields to print as CSV")
 
     return parser
 
@@ -176,9 +182,11 @@ def dispatch(args: argparse.Namespace) -> int:
         import json
         from datetime import date
         from .market_data import get_price_history
+        from .field_selection import parse_fields, print_fields
 
         if args.limit < 0:
             raise CommandError("--limit must be nonnegative")
+        fields = parse_fields(args.fields) if args.fields is not None else None
         result = get_price_history(
             args.symbol, period_type=args.period_type, period=args.period,
             frequency_type=args.frequency_type, frequency=args.frequency,
@@ -188,6 +196,9 @@ def dispatch(args: argparse.Namespace) -> int:
         )
         if args.json:
             print(json.dumps(result, indent=2))
+        elif fields is not None:
+            candles = result["candles"]
+            print_fields(candles[-args.limit:] if args.limit else [], fields)
         else:
             candles = result["candles"]
             print(f"{result.get('symbol', args.symbol)}: {len(candles)} candles")
@@ -201,13 +212,17 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "options" and args.options_command == "expirations":
         import json
         from .market_data import get_option_expirations
+        from .field_selection import parse_fields, print_fields
 
+        fields = parse_fields(args.fields) if args.fields is not None else None
         expirations = get_option_expirations(args.symbol)
         if not args.include_0dte:
             expirations = [x for x in expirations
                            if isinstance(x, dict) and x.get("daysToExpiration", -1) > 0]
         if args.json:
             print(json.dumps(expirations, indent=2))
+        elif fields is not None:
+            print_fields(expirations, fields)
         else:
             for x in expirations:
                 print(f"{x.get('expirationDate')}  "
@@ -219,9 +234,11 @@ def dispatch(args: argparse.Namespace) -> int:
         import json
         from itertools import islice
         from .market_data import get_option_chain, iter_option_contracts
+        from .field_selection import parse_fields, print_fields
 
         if args.limit < 0:
             raise CommandError("--limit must be nonnegative")
+        fields = parse_fields(args.fields) if args.fields is not None else None
         chain = get_option_chain(
             args.symbol, contract_type=args.contract_type,
             from_date=args.from_date, to_date=args.to_date,
@@ -229,6 +246,14 @@ def dispatch(args: argparse.Namespace) -> int:
         )
         if args.json:
             print(json.dumps(chain, indent=2))
+        elif fields is not None:
+            contracts = islice(iter_option_contracts(chain), args.limit)
+            rows = (
+                {**contract, "side": side, "expirationKey": expiration,
+                 "strikeKey": strike}
+                for side, expiration, strike, contract in contracts
+            )
+            print_fields(rows, fields)
         else:
             print(f"{chain.get('symbol', args.symbol)}  "
                   f"Underlying:{chain.get('underlyingPrice', '-')}  "
