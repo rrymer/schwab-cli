@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from .analytics import atr, rsi, session_vwap
+from .analytics import atr, rsi, session_vwap, session_last_timestamp
 from .field_selection import parse_fields
 from .market_data import get_price_history
 
@@ -82,6 +82,7 @@ def calculate_market(
         else:
             value = session_vwap(candles)
         values[name] = value
-        as_of[name] = candles[-1]["datetime"]
+        as_of[name] = (session_last_timestamp(candles)
+                       if name == "vwap_session" else candles[-1]["datetime"])
         sources[name] = source
     return {"symbol": normalized, "metrics": values, "as_of": as_of, "sources": sources}
