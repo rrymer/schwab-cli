@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "schwab-local-cli"
+version = "0.1.0"
+description = "Local Schwab command-line client"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+schwab = "schwab_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/schwab_cli"]
