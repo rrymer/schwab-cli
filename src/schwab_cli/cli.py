@@ -83,6 +83,35 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch one snapshot instead of continuous monitoring",
     )
+    market = commands.add_parser("market", help="Read Schwab market data")
+    market_commands = market.add_subparsers(dest="market_command", required=True)
+    history = market_commands.add_parser("history", help="Fetch historical OHLCV candles")
+    history.add_argument("symbol")
+    history.add_argument("--period-type", choices=["day", "month", "year", "ytd"], default="year")
+    history.add_argument("--period", type=int, default=1)
+    history.add_argument("--frequency-type", choices=["minute", "daily", "weekly", "monthly"], default="daily")
+    history.add_argument("--frequency", type=int, default=1)
+    history.add_argument("--start", help="Start date YYYY-MM-DD (UTC)")
+    history.add_argument("--end", help="End date YYYY-MM-DD (UTC)")
+    history.add_argument("--extended-hours", action="store_true")
+    history.add_argument("--limit", type=int, default=10, help="Display last N candles (default 10)")
+    history.add_argument("--json", action="store_true", help="Print entire raw API response")
+
+    options = commands.add_parser("options", help="Read option expiration and chain data")
+    options_commands = options.add_subparsers(dest="options_command", required=True)
+    expiries = options_commands.add_parser("expirations", help="List option expirations")
+    expiries.add_argument("symbol")
+    expiries.add_argument("--include-0dte", action="store_true")
+    expiries.add_argument("--json", action="store_true", help="Print raw expiration entries")
+    chain = options_commands.add_parser("chain", help="Fetch option chain")
+    chain.add_argument("symbol")
+    chain.add_argument("--type", dest="contract_type", choices=["CALL", "PUT", "ALL"], default="ALL")
+    chain.add_argument("--from-date", help="Earliest expiration YYYY-MM-DD")
+    chain.add_argument("--to-date", help="Latest expiration YYYY-MM-DD")
+    chain.add_argument("--strike-count", type=int)
+    chain.add_argument("--json", action="store_true", help="Print entire raw API response")
+    chain.add_argument("--limit", type=int, default=20, help="Display first N contracts (default 20)")
+
     return parser
 
 
@@ -142,6 +171,80 @@ def dispatch(args: argparse.Namespace) -> int:
                 once=args.once,
             )
             return 0
+
+    if args.command == "market" and args.market_command == "history":
+        from datetime import date
+        import json
+        from .market_data import get_price_history
+
+        if args.limit < 0:
+            raise CommandError("--limit must be nonnegative")
+        data = get_price_history(
+            args.symbol, period_type=args.period_type, period=args.period,
+            frequency_type=args.frequency_type, frequency=args.frequency,
+            start=date.fromisoformat(args.start) if args.start else None,
+            end=date.fromisoformat(args.end) if args.end else None,
+            extended_hours=args.extended_hours,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2))
+        else:
+            candles = data["candles"]
+            print(f"{data.get('symbol', args.symbol)}: {len(candles)} candle(s)")
+            for candle in candles[-args.limit:] if args.limit else []:
+                print(f"{candle.get('datetime')}  O:{candle.get('open')} "
+                      f"H:{candle.get('high')} L:{candle.get('low')} "
+                      f"C:{candle.get('close')} V:{candle.get('volume')}")
+        return 0
+
+    if args.command == "options" and args.options_command == "expirations":
+        import json
+        from .market_data import get_option_expirations
+
+        expirations = get_option_expirations(args.symbol)
+        if not args.include_0dte:
+            expirations = [e for e in expirations if e.get("daysToExpiration", -1) > 0]
+        if args.json:
+            print(json.dumps(expirations, indent=2))
+        else:
+            for expiry in expirations:
+                print(f"{expiry.get('expirationDate')}  "
+                      f"DTE:{expiry.get('daysToExpiration')}  "
+                      f"Type:{expiry.get('expirationType', '-')}")
+        return 0
+
+    if args.command == "options" and args.options_command == "chain":
+        import json
+        from .market_data import get_option_chain
+
+        if args.limit < 0:
+            raise CommandError("--limit must be nonnegative")
+        data = get_option_chain(
+            args.symbol, contract_type=args.contract_type,
+            from_date=args.from_date, to_date=args.to_date,
+            strike_count=args.strike_count,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2))
+        else:
+            print(f"{data.get('symbol', args.symbol)} "
+                  f"underlying:{data.get('underlyingPrice', '-')} "
+                  f"delayed:{data.get('isDelayed', '-')}")
+            shown = 0
+            for side, key in (("CALL", "callExpDateMap"), ("PUT", "putExpDateMap")):
+                for expiration, strikes in (data.get(key) or {}).items():
+                    for strike, contracts in strikes.items():
+                        if isinstance(contracts, dict):
+                            contracts = [contracts]
+                        for contract in contracts:
+                            if shown >= args.limit:
+                                return 0
+                            print(f"{side:4} {expiration:16} {strike:>8} "
+                                  f"bid:{contract.get('bidPrice', '-')} "
+                                  f"ask:{contract.get('askPrice', '-')} "
+                                  f"OI:{contract.get('openInterest', '-')}")
+                            shown += 1
+        return 0
 
     raise CommandError("Unknown command")
 
