@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from .api import BASE_URL, SchwabAPIError, account_numbers
 from .auth import get_access_token
+from .store import PositionStore
 
 
 def remove_none(obj: Any) -> Any:
@@ -225,7 +226,21 @@ def add_position(*, symbol: str, asset_type: str, instruction: str,
     if not submit:
         print("DRY RUN: no order submitted. Add --submit to transmit a LIVE order.")
         return
-    location = submit_order(order)
-    print("Schwab accepted the order request.")
+    instrument_key = PositionStore.key({'symbol': symbol, 'assetType': asset_type})
+    with PositionStore() as store:
+        existing_id = store.active_id(instrument_key)
+        tracking_id = store.reserve_order(instrument_key)
+    print(f"Local order tracking UUID: {tracking_id}")
+    if existing_id:
+        print(f"Existing position UUID: {existing_id} (order may change this position)")
+    try:
+        location = submit_order(order)
+    except Exception:
+        print(f"Submission not confirmed; tracking UUID retained: {tracking_id}")
+        print("Check Schwab order history before retrying; never assume the POST failed.")
+        raise
+    with PositionStore() as store:
+        store.record_order_location(tracking_id, location)
+    print("Schwab accepted the order request; execution is NOT confirmed.")
     if location:
         print(f"Order location: {location}")

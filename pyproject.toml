@@ -14,3 +14,7 @@ schwab = "schwab_cli.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/schwab_cli"]
+
+dependencies = [
+    "requests>=2.32,<3",
+]

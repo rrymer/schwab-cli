@@ -59,6 +59,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Transmit a live order to Schwab",
     )
+    positions_monitor = positions_commands.add_parser(
+        "monitor",
+        help="Monitor Schwab positions",
+    )
+
+    positions_monitor.add_argument(
+        "position_id",
+        nargs="?",
+        default=None,
+        help="UUID of the position to monitor (omit for all positions)",
+    )
+
+    positions_monitor.add_argument(
+        "--interval",
+        type=float,
+        default=15.0,
+        help="Polling interval in seconds (default: 15)",
+    )
+
+    positions_monitor.add_argument(
+        "--once",
+        action="store_true",
+        help="Fetch one snapshot instead of continuous monitoring",
+    )
     return parser
 
 
@@ -106,6 +130,16 @@ def dispatch(args: argparse.Namespace) -> int:
                 session=args.session,
                 duration=args.duration,
                 submit=args.submit,
+            )
+            return 0
+
+        if args.positions_command == "monitor":
+            from .monitor import monitor
+
+            monitor(
+                position_id=args.position_id,
+                interval=args.interval,
+                once=args.once,
             )
             return 0
 

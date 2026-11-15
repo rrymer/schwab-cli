@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .api import get_positions
+from .store import PositionStore
 
 
 def _fmt(value: Any, digits: int = 2) -> str:
@@ -16,8 +17,16 @@ def _fmt(value: Any, digits: int = 2) -> str:
         return str(value)
 
 
-def list_positions(*, as_json: bool = False) -> None:
-    accounts = get_positions()
+def list_positions(*, account: str | None = None, as_json: bool = False) -> None:
+    accounts = get_positions(account=account)
+    # Reconcile only after a successful complete API response.
+    if len(accounts) != 1:
+        raise ValueError('Expected exactly one account snapshot')
+    positions = accounts[0]['securitiesAccount'].get('positions') or []
+    with PositionStore() as store:
+        identities = store.reconcile(positions)
+    for pos in positions:
+        pos['localPositionId'] = identities[PositionStore.key(pos.get('instrument') or {})]
     if as_json:
         print(json.dumps(accounts, indent=2))
         return
@@ -35,11 +44,12 @@ def list_positions(*, as_json: bool = False) -> None:
         print(f"Account {label}: {len(positions)} position(s)")
         if not positions:
             continue
-        headings = ("Symbol", "Asset", "Long", "Short", "Market value", "P/L")
+        headings = ("UUID", "Symbol", "Asset", "Long", "Short", "Market value", "P/L")
         rows = []
         for pos in positions:
             instrument = pos.get("instrument") or {}
             rows.append((
+                str(pos["localPositionId"]),
                 str(instrument.get("symbol") or "?"),
                 str(instrument.get("assetType") or "?"),
                 _fmt(pos.get("longQuantity")),
