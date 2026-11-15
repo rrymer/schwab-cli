@@ -122,3 +122,13 @@ def session_vwap(candles: list[dict[str, Any]]) -> float:
     if total_volume <= 0:
         raise ValueError("Latest regular session has no traded volume for VWAP")
     return sum(price * volume for price, volume in sampled) / total_volume
+
+
+def session_last_timestamp(candles: list[dict[str, Any]]) -> int:
+    """Timestamp of the last regular-session candle used by session_vwap."""
+    _prices(candles, "high", "low", "close", "volume")
+    for candle in reversed(candles):
+        local = datetime.fromtimestamp(candle["datetime"] / 1000, tz=timezone.utc).astimezone(_EASTERN)
+        if _OPEN <= local.time() < _CLOSE and local.weekday() < 5:
+            return candle["datetime"]
+    raise ValueError("No regular-session intraday candles available")
