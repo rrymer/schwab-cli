@@ -83,6 +83,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch one snapshot instead of continuous monitoring",
     )
+    analytics = commands.add_parser("analytics", help="Calculate market indicators")
+    analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
+    analytics_market = analytics_commands.add_parser(
+        "market", help="Compute indicators for a market symbol (not an account position)"
+    )
+    analytics_market.add_argument("symbol")
+    analytics_market.add_argument(
+        "--fields", required=True,
+        help="Comma-separated indicators, e.g. rsi_14,atr_14,vwap_session",
+    )
+
     market = commands.add_parser("market", help="Read Schwab market data")
     market_commands = market.add_subparsers(dest="market_command", required=True)
     history = market_commands.add_parser("history", help="Historical OHLCV prices")
@@ -177,6 +188,14 @@ def dispatch(args: argparse.Namespace) -> int:
                 once=args.once,
             )
             return 0
+
+    if args.command == "analytics" and args.analytics_command == "market":
+        import json
+        from .analytics_service import calculate_market
+
+        result = calculate_market(args.symbol, args.fields)
+        print(json.dumps(result, indent=2))
+        return 0
 
     if args.command == "market" and args.market_command == "history":
         import json
