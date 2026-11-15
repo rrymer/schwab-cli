@@ -35,7 +35,9 @@ PERIOD_FREQUENCIES = {
 def _symbol(value: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Symbol must be a nonempty string")
-    return value.strip().upper()
+    normalized = value.strip().upper()
+    # Schwab uses $SPX for the S&P 500 index, not SPX or $SPX.X.
+    return "$SPX" if normalized in {"SPX", "$SPX.X"} else normalized
 
 
 def _get(path: str, params: dict[str, Any]) -> dict[str, Any]:
