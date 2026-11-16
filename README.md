@@ -69,6 +69,30 @@ python -m unittest -v tests.test_packaging
 schwab --help
 ```
 
+## Continuous integration (GitHub Actions)
+
+GitHub Actions runs the credential-free unit tests for each pull request and
+push to `main`, with Python 3.11 and 3.14 on Linux. You can also launch a run
+manually from **Actions → Python tests → Run workflow**.
+
+The workflow also runs a **Ruff lint** job on `src/` and `tests/`. Initially it checks syntax, indentation-related errors, and undefined names (`E4`, `E7`, `E9`, `F821`–`F823`) without requiring a wholesale formatting cleanup. Locally, run:
+
+```bash
+uvx ruff check --select E4,E7,E9,F821,F822,F823 src tests
+```
+
+The workflow lives in `.github/workflows/tests.yml` and uses `uv sync --locked`
+followed by:
+
+```bash
+uv run --locked python -m unittest discover -s tests -t . -v
+```
+
+Live Schwab tests remain disabled (`SCHWAB_LIVE_TESTS=0`). Do not add brokerage
+credentials as repository secrets merely to run routine CI. Review test results
+and logs in the PR's **Checks** tab. If the repository has required status
+checks configured, GitHub can block merges until those checks pass.
+
 ## Notes on credentials and safety
 
 Schwab credentials and tokens are accessed through the local macOS Keychain, not packaging metadata. Never commit OAuth secrets, tokens, or account details to Git. Previewing an order is the default; `positions add --submit` can transmit a **live** order.
