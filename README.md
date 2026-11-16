@@ -133,6 +133,42 @@ With `--once`, no clear-screen sequences are emitted, even with `--in-place`. Ct
 `currentPrice` and (on options) `underlyingPrice`, but only includes
 `localPositionId` when `--include-ids` is supplied.
 
+## Alerts
+
+A read-only polling alert service is available under `monitor alert`.
+Unlike `positions monitor` (the account position dashboard), it evaluates
+one registered metric against a threshold and emits a terminal notification:
+
+```bash
+uv run schwab monitor alert --symbol SPY --metric price --above 600
+uv run schwab monitor alert --symbol '$SPX' --metric price --below 6800 --interval 10
+uv run schwab monitor alert --position-id <active-position-uuid> --metric price --above 5
+```
+
+Specify exactly one of `--symbol` or `--position-id` and exactly one of
+`--above` or `--below`. The price metric uses a Schwab quote; for an option
+position it prefers the mark. A position alert requires an active local UUID,
+not an instrument symbol. The default polling interval is 15 seconds.
+The optional `--once` evaluates the alert once without sleeping.
+
+An alert fires when a metric first meets or crosses its threshold and does not
+repeat while the condition stays true. It rearms after the value crosses back
+outside the condition. If no usable quote is available, no notification is
+sent and the previous alert state is preserved. Polling cannot guarantee
+detection of price touches between samples.
+
+Notifications are delivered with an **OSC 9 terminal escape sequence**.
+In iTerm2, enable notifications for the terminal profile and allow iTerm2
+notifications in macOS System Settings. The terminal owns the notification,
+so macOS Focus / Do Not Disturb settings govern the eventual presentation.
+Terminal emulators that do not support OSC 9 may ignore the request.
+The process needs to stay running in a terminal session to poll.
+
+The initial metric registry contains only `price`. Other analytics metrics can
+be added later as evaluators that accept an `AlertTarget` and return a number;
+the threshold, polling and notification code requires no changes.
+The existing `positions monitor` CLI remains unchanged.
+
 ## Market data
 
 After `uv sync`, use `uv run schwab` to keep the executable inside the project's managed environment:
