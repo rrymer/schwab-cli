@@ -229,6 +229,11 @@ respective API modules.
 
 ### Local configuration (`~/.schwab/config.yaml`)
 
+Run `uv run schwab init` to explicitly create the default configuration without
+contacting Schwab or reading Keychain. If the file already exists, the command
+reports that and leaves it unchanged. The ordinary first-run initialization
+remains available as well.
+
 Override application defaults without modifying Python source. On the first
 normal CLI execution, the application creates `~/.schwab/config.yaml` with
 all default settings in an editable YAML mapping (directory mode `0700`,
