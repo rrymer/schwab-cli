@@ -137,16 +137,20 @@ With `--once`, no clear-screen sequences are emitted, even with `--in-place`. Ct
 
 A read-only polling alert service is available under `monitor alert`.
 Unlike `positions monitor` (the account position dashboard), it evaluates
-one registered metric against a threshold and emits a terminal notification:
+one registered metric against a threshold and sends output to the explicitly
+selected destinations:
 
 ```bash
-uv run schwab monitor alert --symbol SPY --metric price --above 600
-uv run schwab monitor alert --symbol '$SPX' --metric price --below 6800 --interval 10
-uv run schwab monitor alert --position-id <active-position-uuid> --metric price --above 5
+uv run schwab monitor alert --symbol SPY --metric price --above 600 --stdout
+uv run schwab monitor alert --symbol '$SPX' --metric price --below 6800 --interval 10 --notify
+uv run schwab monitor alert --position-id <active-position-uuid> --metric price --above 5 --stdout --notify
 ```
 
-Specify exactly one of `--symbol` or `--position-id` and exactly one of
-`--above` or `--below`. The price metric uses a Schwab quote; for an option
+Specify exactly one of `--symbol` or `--position-id`, exactly one of
+`--above` or `--below`, and at least one output flag: `--stdout`, `--notify`,
+or both. `--stdout` prints one line per triggered alert; `--notify` sends the
+terminal notification request. With both flags, each triggered alert goes to
+both destinations. Without either flag, the command fails immediately. The price metric uses a Schwab quote; for an option
 position it prefers the mark. A position alert requires an active local UUID,
 not an instrument symbol. The default polling interval is 15 seconds.
 The optional `--once` evaluates the alert once without sleeping.
@@ -157,7 +161,7 @@ outside the condition. If no usable quote is available, no notification is
 sent and the previous alert state is preserved. Polling cannot guarantee
 detection of price touches between samples.
 
-Notifications are delivered with an **OSC 9 terminal escape sequence**.
+When `--notify` is supplied, notifications are delivered with an **OSC 9 terminal escape sequence**.
 In iTerm2, enable notifications for the terminal profile and allow iTerm2
 notifications in macOS System Settings. The terminal owns the notification,
 so macOS Focus / Do Not Disturb settings govern the eventual presentation.
