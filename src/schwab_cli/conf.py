@@ -1,8 +1,15 @@
-"""Shared, non-secret application defaults.
+"""Validated flat YAML configuration with non-secret application defaults.
 
-Change values here rather than editing CLI parsers and service signatures.
-Schwab API enum constraints and strategy math are intentionally not config.
+Only documented scalar settings from ~/.schwab/config.yaml are supported.
+Credentials remain in macOS Keychain, not in YAML.
 """
+
+from pathlib import Path
+import json
+import math
+import os
+import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Monitoring and requests (seconds).
 POSITION_POLL_SECONDS = 15.0
@@ -63,13 +70,6 @@ KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT = "access_expires_at"
 # A flat YAML mapping is intentionally supported without a third-party parser.
 # Configuration is loaded once at process import; restart a long-running
 # monitor after modifying ~/.schwab/config.yaml.
-from pathlib import Path
-import json
-import math
-import os
-import re
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 CONFIG_PATH = Path.home() / ".schwab" / "config.yaml"
 _DEFAULTS = {
     name: value for name, value in tuple(globals().items())
@@ -133,7 +133,7 @@ def _validate(name: str, value):
     if isinstance(default, str):
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{name} must be a nonempty string")
-        if name.startswith("KEYCHAIN_") and any(c in value for c in "\\r\\n\\x00"):
+        if name.startswith("KEYCHAIN_") and any(c in value for c in "\r\n\x00"):
             raise ValueError(f"{name} contains invalid characters")
         if name == "MARKET_TIMEZONE":
             try:
@@ -156,6 +156,10 @@ def _validate(name: str, value):
         raise ValueError("Invalid HISTORY_FREQUENCY_TYPE")
     if name == "DEFAULT_ASSET_TYPE" and value not in {"EQUITY", "OPTION"}:
         raise ValueError("Invalid DEFAULT_ASSET_TYPE")
+    if name == "DEFAULT_SESSION" and value not in {"NORMAL", "AM", "PM", "SEAMLESS"}:
+        raise ValueError("Invalid DEFAULT_SESSION")
+    if name == "DEFAULT_DURATION" and value not in {"DAY", "GOOD_TILL_CANCEL", "FILL_OR_KILL", "IMMEDIATE_OR_CANCEL"}:
+        raise ValueError("Invalid DEFAULT_DURATION")
     if name == "DEFAULT_ORDER_TYPE" and value not in {"LIMIT", "MARKET"}:
         raise ValueError("Invalid DEFAULT_ORDER_TYPE")
     if name == "DEFAULT_CONTRACT_TYPE" and value not in {"CALL", "PUT", "ALL"}:
