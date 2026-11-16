@@ -41,7 +41,7 @@ def render_positions(
         lines.append(f"Account {label}: {len(positions)} position(s)")
         if not positions:
             continue
-        headings = ["Symbol", "Asset", "Long", "Short", "Price", "Underlying", "Market value", "P/L"]
+        headings = ["Symbol", "Asset", "Long", "Short", "Avg trade", "Price", "Underlying", "Market value", "P/L"]
         if include_ids:
             headings.insert(0, "UUID")
         rows = []
@@ -54,6 +54,7 @@ def render_positions(
                 str(instrument.get("assetType") or "?"),
                 _fmt(pos.get("longQuantity")),
                 _fmt(pos.get("shortQuantity")),
+                _fmt(pos.get("averagePrice")),
                 _fmt(instrument_price),
                 _fmt(underlying_price),
                 _fmt(pos.get("marketValue")),
