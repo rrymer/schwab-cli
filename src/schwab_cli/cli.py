@@ -80,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     positions_monitor.add_argument("--include-ids", action="store_true", help="Show position UUIDs")
+    positions_monitor.add_argument("--in-place", action="store_true", help="Clear and redraw the same terminal area on each refresh")
 
     positions_monitor.add_argument(
         "--once",
@@ -179,6 +180,7 @@ def dispatch(args: argparse.Namespace) -> int:
                 interval=args.interval,
                 once=args.once,
                 include_ids=args.include_ids,
+                in_place=args.in_place,
             )
             return 0
 
