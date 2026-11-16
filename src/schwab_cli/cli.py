@@ -100,6 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_level.add_argument("--above", type=float, help="Notify at or above this level")
     monitor_level.add_argument("--below", type=float, help="Notify at or below this level")
     monitor_alert.add_argument("--interval", type=float, default=15.0, help="Poll interval in seconds")
+    monitor_alert.add_argument("--stdout", action="store_true", help="Print triggered alerts to stdout")
+    monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
     monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
 
     market = commands.add_parser("market", help="Read Schwab market data")
@@ -206,6 +208,7 @@ def dispatch(args: argparse.Namespace) -> int:
             symbol=args.symbol, position_id=args.position_id,
             metric=args.metric, above=args.above, below=args.below,
             interval=args.interval, once=args.once,
+            stdout=args.stdout, notify=args.notify,
         )
         return 0
 
