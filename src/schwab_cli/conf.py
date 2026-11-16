@@ -166,8 +166,8 @@ def ensure_config_file(path: Path | str | None = None) -> bool:
         return False
     config_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     content = (
-        "# Schwab CLI local configuration. Restart the CLI to apply changes.\\n"
-        "# Only Keychain lookup identifiers are stored here, never secrets.\\n"
+        "# Schwab CLI local configuration. Restart the CLI to apply changes.\n"
+        "# Only Keychain lookup identifiers are stored here, never secrets.\n"
         + yaml.safe_dump(_DEFAULTS, sort_keys=False, default_flow_style=False)
     )
     try:
