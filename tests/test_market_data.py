@@ -131,8 +131,9 @@ class MarketDataTests(unittest.TestCase):
         self.assertNotIn("private-secret", str(captured.exception))
 
     def test_cli_args(self):
-        args = build_parser().parse_args(["market", "history", "AAPL", "--frequency-type", "weekly"])
+        args = build_parser().parse_args(["analytics", "history", "AAPL", "--frequency-type", "weekly"])
         self.assertEqual(args.frequency_type, "weekly")
+        self.assertEqual(args.metric, "price")
         args = build_parser().parse_args(["options", "chain", "SPX", "--type", "PUT"])
         self.assertEqual(args.contract_type, "PUT")
 
