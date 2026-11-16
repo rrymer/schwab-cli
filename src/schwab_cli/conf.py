@@ -1,0 +1,49 @@
+"""Shared, non-secret application defaults.
+
+Change values here rather than editing CLI parsers and service signatures.
+Schwab API enum constraints and strategy math are intentionally not config.
+"""
+
+# Monitoring and requests (seconds).
+POSITION_POLL_SECONDS = 15.0
+ALERT_POLL_SECONDS = 15.0
+HTTP_TIMEOUT_SECONDS = 30
+LOGIN_TIMEOUT_SECONDS = 180
+CALLBACK_POLL_SECONDS = 0.5
+TOKEN_REFRESH_BUFFER_SECONDS = 60
+ACCESS_TOKEN_FALLBACK_SECONDS = 1800
+
+# CLI / broker order defaults.
+DEFAULT_ASSET_TYPE = "EQUITY"
+DEFAULT_ORDER_TYPE = "LIMIT"
+DEFAULT_SESSION = "NORMAL"
+DEFAULT_DURATION = "DAY"
+DEFAULT_ALERT_METRIC = "price"
+DEFAULT_HISTORY_METRIC = "price"
+DEFAULT_CONTRACT_TYPE = "ALL"
+
+# Historical price queries and output.
+HISTORY_PERIOD_TYPE = "year"
+HISTORY_PERIOD = 1
+HISTORY_FREQUENCY_TYPE = "daily"
+HISTORY_FREQUENCY = 1
+HISTORY_DISPLAY_LIMIT = 10
+CHAIN_DISPLAY_LIMIT = 20
+ANALYTICS_DAILY_PERIOD_TYPE = "year"
+ANALYTICS_DAILY_PERIOD = 1
+ANALYTICS_INTRADAY_PERIOD_TYPE = "day"
+ANALYTICS_INTRADAY_PERIOD = 1
+
+# Regular US equity session and dashboard technicals.
+MARKET_TIMEZONE = "America/New_York"
+REGULAR_SESSION_START_MINUTE = 9 * 60 + 30
+REGULAR_SESSION_END_MINUTE = 16 * 60
+DASHBOARD_RSI_PERIOD = 14
+DASHBOARD_BAR_MINUTES = 5
+DASHBOARD_INTRADAY_DAYS = 5
+DASHBOARD_ADV_SESSIONS = 10
+DASHBOARD_DAILY_PERIOD_TYPE = "month"
+DASHBOARD_DAILY_PERIOD = 1
+
+# Standard contract fallback; nonstandard multipliers must be verified.
+STANDARD_OPTION_MULTIPLIER = 100.0
