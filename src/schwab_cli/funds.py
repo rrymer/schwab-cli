@@ -25,7 +25,7 @@ def account_funds(account: dict[str, Any]) -> dict[str, float | None]:
         raise ValueError("Missing securitiesAccount")
     balances = account_data.get("currentBalances")
     if not isinstance(balances, dict):
-        raise ValueError("Schwab account snapshot lacks currentBalances")
+        balances = {}  # Some account types and fixtures omit balances. Show unavailable, not zero.
     result: dict[str, float | None] = {}
     for _, name in BALANCE_FIELDS:
         value = balances.get(name)
