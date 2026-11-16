@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("init", help="Create ~/.schwab/config.yaml if missing")
 
     auth = commands.add_parser("auth", help="Manage Schwab authorization")
     auth_commands = auth.add_subparsers(dest="auth_command", required=True)
@@ -155,6 +156,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def dispatch(args: argparse.Namespace) -> int:
+    if args.command == "init":
+        created = conf.ensure_config_file()
+        action = "Created" if created else "Already exists (unchanged)"
+        print(f"{action}: {conf.CONFIG_PATH}")
+        return 0
+
     if args.command == "auth":
         if args.auth_command == "login":
             from .auth import login
@@ -350,7 +357,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .api import SchwabAPIError
     from .auth import AuthError
     try:
-        conf.ensure_config_file()
+        if args.command != "init":
+            conf.ensure_config_file()
         return dispatch(args)
     except (CommandError, ValueError, OSError, SchwabAPIError, AuthError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
