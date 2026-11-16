@@ -68,7 +68,7 @@ class AlertTests(unittest.TestCase):
 
     def test_alert_once_emits_only_when_met(self):
         delivered = []
-        alerts.alert(symbol="SPY", metric="price", above=500, once=True,
+        alerts.alert(symbol="SPY", metric="price", above=500, once=True, notify=True,
                      metric_evaluators={"price": lambda _: 501.5},
                      notifier=delivered.append)
         self.assertEqual(len(delivered), 1)
@@ -79,6 +79,32 @@ class AlertTests(unittest.TestCase):
                      notifier=delivered.append)
         self.assertEqual(delivered, [])
 
+    def test_stdout_only_and_both_outputs(self):
+        output = io.StringIO()
+        notified = []
+        with patch("sys.stdout", output):
+            alerts.alert(symbol="SPY", above=500, once=True, stdout=True,
+                         metric_evaluators={"price": lambda _: 501.5},
+                         notifier=notified.append)
+        self.assertIn("Schwab alert: SPY", output.getvalue())
+        self.assertEqual(notified, [])
+
+        output = io.StringIO()
+        with patch("sys.stdout", output):
+            alerts.alert(symbol="SPY", above=500, once=True, stdout=True, notify=True,
+                         metric_evaluators={"price": lambda _: 501.5},
+                         notifier=notified.append)
+        self.assertIn("Schwab alert: SPY", output.getvalue())
+        self.assertEqual(len(notified), 1)
+        self.assertEqual(output.getvalue().strip(), notified[0])
+
+    def test_missing_outputs_fail_before_polling(self):
+        fetched = []
+        with self.assertRaisesRegex(ValueError, "at least one alert output"):
+            alerts.alert(symbol="SPY", above=500, once=True,
+                         metric_evaluators={"price": lambda _: fetched.append(1)})
+        self.assertEqual(fetched, [])
+
     def test_missing_quote_does_not_fire_or_reset(self):
         rule = alerts.ThresholdRule("above", 10)
         self.assertTrue(rule.update(11))
@@ -87,24 +113,26 @@ class AlertTests(unittest.TestCase):
 
     def test_invalid_metric_or_interval_fails_before_fetching(self):
         with self.assertRaisesRegex(ValueError, "Unknown alert metric"):
-            alerts.alert(symbol="SPY", metric="rsi_14", above=50, once=True)
+            alerts.alert(symbol="SPY", metric="rsi_14", above=50, once=True, stdout=True)
         with self.assertRaisesRegex(ValueError, "interval"):
             alerts.alert(symbol="SPY", above=100, interval=0, once=True)
         with self.assertRaisesRegex(ValueError, "exactly one"):
-            alerts.alert(symbol="SPY", once=True)
+            alerts.alert(symbol="SPY", once=True, stdout=True)
         with self.assertRaises(ValueError):
-            alerts.alert(symbol="SPY", above=float("nan"), once=True)
+            alerts.alert(symbol="SPY", above=float("nan"), once=True, stdout=True)
 
     def test_cli_parser_and_dispatch_to_alert(self):
         args = build_parser().parse_args([
             "monitor", "alert", "--symbol", "SPY", "--metric", "price",
-            "--above", "500", "--once",
+            "--above", "500", "--once", "--stdout", "--notify",
         ])
         self.assertEqual(args.symbol, "SPY")
         with patch.object(alerts, "alert") as run:
             self.assertEqual(dispatch(args), 0)
         run.assert_called_once()
         self.assertEqual(run.call_args.kwargs["above"], 500.0)
+        self.assertTrue(run.call_args.kwargs["stdout"])
+        self.assertTrue(run.call_args.kwargs["notify"])
 
     def test_old_position_monitor_command_still_parses(self):
         args = build_parser().parse_args(["positions", "monitor", "some-uuid", "--once"])
