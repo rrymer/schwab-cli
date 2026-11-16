@@ -80,7 +80,9 @@ POSITION_POLL_SECONDS: 3.5
         self.assertEqual(config_path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(config_path.parent.stat().st_mode & 0o777, 0o700)
         parsed = conf.load_overrides(config_path)
-        self.assertEqual(parsed, conf._DEFAULTS)
+        self.assertEqual(parsed, conf._DEFAULTS, {k: (conf._DEFAULTS[k], parsed.get(k))
+                                                  for k in conf._DEFAULTS
+                                                  if conf._DEFAULTS[k] != parsed.get(k)})
         text = config_path.read_text(encoding="utf-8")
         self.assertIn("POSITION_POLL_SECONDS:", text)
         self.assertNotIn("client_secret: ", text)
