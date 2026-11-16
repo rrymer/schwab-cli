@@ -173,6 +173,35 @@ be added later as evaluators that accept an `AlertTarget` and return a number;
 the threshold, polling and notification code requires no changes.
 The existing `positions monitor` CLI remains unchanged.
 
+## Optional position technicals
+
+Use `--technicals` with either snapshot or monitor to append **RSI 5m**,
+**Vol sess**, and **ADV 10d** columns:
+
+```bash
+uv run schwab positions list --technicals
+uv run schwab positions monitor --technicals --in-place --interval 30
+uv run schwab positions list --technicals --json
+```
+
+`RSI 5m` is Wilder RSI(14) over regular-session five-minute close prices.
+`Vol sess` sums available five-minute volume for the **latest available**
+regular US equity session, which may be partial. `ADV 10d` is the mean
+of the **previous ten completed daily trading bars**, excluding that session.
+When there are too few completed daily bars, an unavailable underlying, or an
+unsuitable history response, metrics display `-` rather than invented values.
+Volume columns abbreviate thousands (`k`) and millions (`m`).
+
+For option positions, these are **underlying equity** indicators rather than
+option-contract volume or RSI. The underlying comes from Schwab's option
+quote reference; the system does not guess it from the OCC symbol. Duplicate
+underlyings are fetched once per refresh. This opt-in feature makes additional
+market-data requests, including two price-history calls per distinct underlying
+per refresh, so use an appropriate monitor interval. Metric values use the
+latest available regular session and may be stale outside market hours.
+The compact asset code is **E** for equity and collective investment, **O**
+for options, and **?** for unrecognized asset types.
+
 ## Account funds and position P&L
 
 `positions funds` shows six **reported currentBalances** amounts, in USD,
