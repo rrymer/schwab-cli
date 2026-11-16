@@ -189,7 +189,7 @@ def dispatch(args: argparse.Namespace) -> int:
             )
             return 0
 
-    if args.command == "analytics" and args.analytics_command == "market":
+    if args.command == "market" and args.analytics_command == "analytics":
         import json
         from .analytics_service import calculate_market
 
