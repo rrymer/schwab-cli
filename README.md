@@ -173,6 +173,48 @@ be added later as evaluators that accept an `AlertTarget` and return a number;
 the threshold, polling and notification code requires no changes.
 The existing `positions monitor` CLI remains unchanged.
 
+## Account funds and position P&L
+
+`positions funds` shows six **reported currentBalances** amounts, in USD,
+on one compact line. The same line appears above the position rows in both
+`positions list` and `positions monitor`:
+
+```bash
+uv run schwab positions funds
+uv run schwab positions funds --json
+uv run schwab positions list
+uv run schwab positions monitor --in-place
+```
+
+Example: `C:12.5k  T:8.0k  A:7.0k  B:24.0k  O:3.0k  D:50.0k`
+
+Abbreviations: **C** cash balance (`cashBalance`), **T** cash available to
+trade (`cashAvailableForTrading`), **A** available funds (`availableFunds`),
+**B** buying power (`buyingPower`), **O** option buying power
+(`optionBuyingPower`), and **D** day trading buying power
+(`dayTradingBuyingPower`). Figures are thousands of USD rounded to one
+decimal; `-` means not supplied or unusable, **not zero**. These balances are
+not interchangeable and can vary by account type and margin status. JSON
+returns full numeric precision and canonical Schwab field names.
+
+For live, single-position unrealized P&L use:
+
+```bash
+uv run schwab positions list --include-ids
+uv run schwab analytics calculate --position-id YOUR-UUID --metric pnl
+```
+
+`pnl` currently means **unrealized average-cost P&L in USD**, not daily P&L,
+cumulative realized trade P&L or a multi-leg strategy ledger. It is computed
+from Schwab's signed position market value, signed net quantity, aggregate
+average purchase/sale price and contract multiplier (default 100 for standard
+options, 1 for stocks). Unknown inputs raise an error instead of generating
+a made-up number. Closing commissions, fees, and previously realized executions
+are **not** included. This metric is available through
+`schwab_cli.position_metrics.calculate_position(position_id, "pnl")` for
+future TradePlans use and deliberately is not a history metric. Values reflect
+the latest fetched Schwab account snapshot, not a continuously executed fill.
+
 ## Analytics and market data
 
 After `uv sync`, use `uv run schwab` to keep the executable inside the project's managed environment:
