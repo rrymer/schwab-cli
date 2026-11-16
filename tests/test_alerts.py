@@ -74,7 +74,7 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(len(delivered), 1)
         self.assertIn("501.5", delivered[0])
         delivered.clear()
-        alerts.alert(symbol="SPY", metric="price", above=500, once=True,
+        alerts.alert(symbol="SPY", metric="price", above=500, once=True, notify=True,
                      metric_evaluators={"price": lambda _: 499},
                      notifier=delivered.append)
         self.assertEqual(delivered, [])
@@ -115,7 +115,7 @@ class AlertTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown alert metric"):
             alerts.alert(symbol="SPY", metric="rsi_14", above=50, once=True, stdout=True)
         with self.assertRaisesRegex(ValueError, "interval"):
-            alerts.alert(symbol="SPY", above=100, interval=0, once=True)
+            alerts.alert(symbol="SPY", above=100, interval=0, once=True, stdout=True)
         with self.assertRaisesRegex(ValueError, "exactly one"):
             alerts.alert(symbol="SPY", once=True, stdout=True)
         with self.assertRaises(ValueError):
