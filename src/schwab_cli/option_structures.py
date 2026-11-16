@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from typing import Any
 
 from .store import PositionStore
@@ -35,14 +35,9 @@ def _parse(position: dict[str, Any]) -> _Leg | None:
     if not match:
         return None
     try:
-        expiry = date.strptime(match["date"], "%y%m%d").isoformat()
-    except (ValueError, AttributeError):
-        # date.strptime is unavailable in the supported Python 3.11 runtime.
-        from datetime import datetime
-        try:
-            expiry = datetime.strptime(match["date"], "%y%m%d").date().isoformat()
-        except ValueError:
-            return None
+        expiry = datetime.strptime(match["date"], "%y%m%d").date().isoformat()
+    except ValueError:
+        return None
     long_qty, short_qty = position.get("longQuantity", 0), position.get("shortQuantity", 0)
     if (type(long_qty) not in (int, float) or type(short_qty) not in (int, float)
             or long_qty < 0 or short_qty < 0 or bool(long_qty) == bool(short_qty)):
@@ -59,9 +54,9 @@ def _vertical(legs: list[_Leg]) -> str | None:
     left, right = sorted(legs, key=lambda leg: leg.strike)
     if (left.strike == right.strike or left.signed_quantity != -right.signed_quantity):
         return None
-    # At expiration, a long higher-strike call is bullish, and a long
-    # higher-strike put is bullish as well (debit put vertical / bear call etc.).
-    bullish = right.signed_quantity > 0
+    # Calls: long higher strike bullish. Puts: long lower strike bullish.
+    bullish = (right.signed_quantity > 0 if left.side == "C"
+               else left.signed_quantity > 0)
     return "BV" if bullish else "CV"
 
 
