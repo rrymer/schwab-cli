@@ -6,6 +6,8 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from . import conf
+
 class CommandError(Exception):
     """A user-facing command failure."""
 
@@ -49,16 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
     positions_add.add_argument(
         "--asset-type",
         choices=["EQUITY", "OPTION"],
-        default="EQUITY",
+        default=conf.DEFAULT_ASSET_TYPE,
     )
     positions_add.add_argument(
         "--order-type",
         choices=["LIMIT", "MARKET"],
-        default="LIMIT",
+        default=conf.DEFAULT_ORDER_TYPE,
     )
     positions_add.add_argument("--price", type=float)
-    positions_add.add_argument("--session", default="NORMAL")
-    positions_add.add_argument("--duration", default="DAY")
+    positions_add.add_argument("--session", default=conf.DEFAULT_SESSION)
+    positions_add.add_argument("--duration", default=conf.DEFAULT_DURATION)
     positions_add.add_argument(
         "--submit",
         action="store_true",
@@ -79,8 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
     positions_monitor.add_argument(
         "--interval",
         type=float,
-        default=15.0,
-        help="Polling interval in seconds (default: 15)",
+        default=conf.POSITION_POLL_SECONDS,
+        help=f"Polling interval in seconds (default: {conf.POSITION_POLL_SECONDS:g})",
     )
 
     positions_monitor.add_argument("--include-ids", action="store_true", help="Show position UUIDs")
@@ -100,11 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_target = monitor_alert.add_mutually_exclusive_group(required=True)
     monitor_target.add_argument("--symbol", help="Market ticker to monitor")
     monitor_target.add_argument("--position-id", help="Active local position UUID")
-    monitor_alert.add_argument("--metric", default="price", help="Registered metric (currently: price)")
+    monitor_alert.add_argument("--metric", default=conf.DEFAULT_ALERT_METRIC, help="Registered metric (currently: price)")
     monitor_level = monitor_alert.add_mutually_exclusive_group(required=True)
     monitor_level.add_argument("--above", type=float, help="Notify at or above this level")
     monitor_level.add_argument("--below", type=float, help="Notify at or below this level")
-    monitor_alert.add_argument("--interval", type=float, default=15.0, help="Poll interval in seconds")
+    monitor_alert.add_argument("--interval", type=float, default=conf.ALERT_POLL_SECONDS, help="Poll interval in seconds")
     monitor_alert.add_argument("--stdout", action="store_true", help="Print triggered alerts to stdout")
     monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
     monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
@@ -117,15 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     history = analytics_commands.add_parser("history", help="Price candles or a technical indicator")
     history.add_argument("symbol")
-    history.add_argument("--metric", default="price", help="price (default), rsi_N, atr_N, or vwap_session")
-    history.add_argument("--period-type", choices=("day", "month", "year", "ytd"), default="year")
-    history.add_argument("--period", type=int, default=1)
-    history.add_argument("--frequency-type", choices=("minute", "daily", "weekly", "monthly"), default="daily")
-    history.add_argument("--frequency", type=int, default=1)
+    history.add_argument("--metric", default=conf.DEFAULT_HISTORY_METRIC, help="price (default), rsi_N, atr_N, or vwap_session")
+    history.add_argument("--period-type", choices=("day", "month", "year", "ytd"), default=conf.HISTORY_PERIOD_TYPE)
+    history.add_argument("--period", type=int, default=conf.HISTORY_PERIOD)
+    history.add_argument("--frequency-type", choices=("minute", "daily", "weekly", "monthly"), default=conf.HISTORY_FREQUENCY_TYPE)
+    history.add_argument("--frequency", type=int, default=conf.HISTORY_FREQUENCY)
     history.add_argument("--start", help="UTC start date YYYY-MM-DD")
     history.add_argument("--end", help="UTC end date YYYY-MM-DD")
     history.add_argument("--extended-hours", action="store_true")
-    history.add_argument("--limit", type=int, default=10, help="Display last N candles")
+    history.add_argument("--limit", type=int, default=conf.HISTORY_DISPLAY_LIMIT, help="Display last N candles")
     history_output = history.add_mutually_exclusive_group()
     history_output.add_argument("--json", action="store_true", help="Print the complete API response")
     history_output.add_argument("--fields", help="Comma-separated candle fields to print as CSV")
@@ -140,11 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     expiration_output.add_argument("--fields", help="Comma-separated expiration fields to print as CSV")
     chain = option_commands.add_parser("chain", help="Retrieve an option chain")
     chain.add_argument("symbol")
-    chain.add_argument("--type", choices=("CALL", "PUT", "ALL"), default="ALL", dest="contract_type")
+    chain.add_argument("--type", choices=("CALL", "PUT", "ALL"), default=conf.DEFAULT_CONTRACT_TYPE, dest="contract_type")
     chain.add_argument("--from-date", help="First expiration YYYY-MM-DD")
     chain.add_argument("--to-date", help="Last expiration YYYY-MM-DD")
     chain.add_argument("--strike-count", type=int, help="Number of strikes around ATM")
-    chain.add_argument("--limit", type=int, default=20, help="Display up to N contracts")
+    chain.add_argument("--limit", type=int, default=conf.CHAIN_DISPLAY_LIMIT, help="Display up to N contracts")
     chain_output = chain.add_mutually_exclusive_group()
     chain_output.add_argument("--json", action="store_true", help="Print the complete API response")
     chain_output.add_argument("--fields", help="Comma-separated contract fields to print as CSV")
@@ -253,7 +255,9 @@ def dispatch(args: argparse.Namespace) -> int:
                 raise CommandError("--fields and --json only apply to --metric price")
             if (args.period_type, args.period, args.frequency_type, args.frequency,
                 args.start, args.end, args.extended_hours, args.limit) != (
-                "year", 1, "daily", 1, None, None, False, 10
+                conf.HISTORY_PERIOD_TYPE, conf.HISTORY_PERIOD,
+                conf.HISTORY_FREQUENCY_TYPE, conf.HISTORY_FREQUENCY,
+                None, None, False, conf.HISTORY_DISPLAY_LIMIT
             ):
                 raise CommandError("History range/frequency/limit options only apply to --metric price")
             print(json.dumps(calculate_market(args.symbol, (args.metric,)), indent=2))
