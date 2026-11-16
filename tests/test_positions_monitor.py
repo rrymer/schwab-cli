@@ -93,7 +93,7 @@ class PositionPresentationTests(unittest.TestCase):
              patch.object(monitor.sys, 'stdout', fake):
             monitor.monitor(interval=1)
         value = fake.getvalue()
-        self.assertEqual(value.count('\\x1b[H\\x1b[2J'), 2)
+        self.assertEqual(value.count('\x1b[H\x1b[2J'), 2)
         self.assertEqual(value.count('AAPL'), 2)
 
     def test_monitor_rejects_nonpositive_interval(self):
