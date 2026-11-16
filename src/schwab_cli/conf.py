@@ -154,6 +154,37 @@ def load_overrides(path: Path | str | None = None) -> dict[str, object]:
     return overrides
 
 
+def ensure_config_file(path: Path | str | None = None) -> bool:
+    """Install a complete editable defaults file once, without overwriting it.
+
+    Called by the CLI, not on module import, so library use and unit tests
+    do not unexpectedly write into the user's home directory. The file holds
+    setting names only, never actual Keychain credentials or tokens.
+    """
+    config_path = Path(path) if path is not None else CONFIG_PATH
+    if config_path.exists():
+        return False
+    config_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    content = (
+        "# Schwab CLI local configuration. Restart the CLI to apply changes.\\n"
+        "# Only Keychain lookup identifiers are stored here, never secrets.\\n"
+        + yaml.safe_dump(_DEFAULTS, sort_keys=False, default_flow_style=False)
+    )
+    try:
+        # Atomic exclusive creation prevents clobbering a file created by a
+        # concurrent CLI process. Restrict readability at creation time.
+        fd = os.open(config_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+    except BaseException:
+        config_path.unlink(missing_ok=True)
+        raise
+    return True
+
+
 globals().update(load_overrides())
 # Keep the pre-existing environment overrides for OAuth/Keychain identifiers.
 REDIRECT_URI = os.getenv("SCHWAB_REDIRECT_URI", REDIRECT_URI)
