@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from schwab_cli import alerts
 from schwab_cli.cli import build_parser, dispatch
+from schwab_cli.store import PositionStore
 from tests.helpers import position, snapshot
 
 
@@ -24,6 +25,7 @@ class AlertTests(unittest.TestCase):
              patch.object(alerts, "get_quotes", return_value={
                  "SPY   261220P00500000": {"quote": {"lastPrice": 1.25, "mark": 1.5}}
              }):
+            store.key.side_effect = PositionStore.key
             store.return_value.__enter__.return_value.reconcile.return_value = {
                 "OPTION:SPY   261220P00500000": "fake-uuid"
             }
@@ -32,6 +34,7 @@ class AlertTests(unittest.TestCase):
     def test_unknown_position_uuid_is_rejected(self):
         with patch.object(alerts, "get_positions", return_value=snapshot(position())), \
              patch.object(alerts, "PositionStore") as store:
+            store.key.side_effect = PositionStore.key
             store.return_value.__enter__.return_value.reconcile.return_value = {"EQUITY:AAPL": "real-id"}
             with self.assertRaisesRegex(ValueError, "no active holding"):
                 alerts.price_metric(alerts.AlertTarget(position_id="unknown"))
