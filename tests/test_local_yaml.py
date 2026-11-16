@@ -96,11 +96,11 @@ POSITION_POLL_SECONDS: 3.5
             self.assertEqual(main(["positions", "list"]), 0)
             dispatch.assert_called_once()
         self.assertTrue(target.exists())
-        target.write_text("POSITION_POLL_SECONDS: 33\\n", encoding="utf-8")
+        target.write_text("POSITION_POLL_SECONDS: 33\n", encoding="utf-8")
         with (patch.object(conf, "CONFIG_PATH", target),
               patch("schwab_cli.cli.dispatch", return_value=0)):
             self.assertEqual(main(["positions", "list"]), 0)
-        self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\\n")
+        self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\n")
 
     def test_auth_service_mapping_retains_existing_key_names(self):
         self.assertEqual(auth._KEYCHAIN_SERVICES["client_id"], conf.KEYCHAIN_SERVICE_CLIENT_ID)
