@@ -229,9 +229,11 @@ respective API modules.
 
 ### Local configuration (`~/.schwab/config.yaml`)
 
-Override application defaults without modifying Python source. Create
-`~/.schwab/config.yaml` as a **flat YAML mapping** of uppercase setting
-names to scalar values:
+Override application defaults without modifying Python source. On the first
+normal CLI execution, the application creates `~/.schwab/config.yaml` with
+all default settings in an editable YAML mapping (directory mode `0700`,
+file mode `0600`). An existing configuration file is **never overwritten**.
+For example, customize these entries:
 
 ```yaml
 POSITION_POLL_SECONDS: 30
@@ -247,9 +249,12 @@ KEYCHAIN_SERVICE_REFRESH_TOKEN: "refresh_token"
 KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT: "access_expires_at"
 ```
 
-Only include settings you want to override. The file is optional: if absent,
-`conf.py` defaults are used. It is loaded when the process starts; restart
-`positions monitor` after editing it. CLI flags such as `--interval`
+You can delete individual entries to fall back to built-in defaults. Library
+imports never create the file. Configuration is read **once per Python
+process** and kept as in-memory module values, not re-read on every dashboard
+poll. The operating system also caches filesystem reads; there is no need
+for a separate system-wide cache. Restart a running `positions monitor`
+after editing the file. CLI flags such as `--interval`
 still override the configured default. Unknown settings, invalid types,
 malformed YAML and unsupported values cause a clear configuration error rather
 than silently falling back to unsafe defaults.
