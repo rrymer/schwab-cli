@@ -107,24 +107,39 @@ class PositionPresentationTests(unittest.TestCase):
             monitor.monitor(position_id='missing-id', once=True)
         self.assertIn('no active position found', out.getvalue())
 
-    def test_monitor_clears_screen_only_on_tty_refresh(self):
+    def test_monitor_in_place_is_explicit_not_tty_detected(self):
         data = snapshot(position())
-        fake = io.StringIO()
-        fake.isatty = lambda: True
-        calls = [None, KeyboardInterrupt()]
-        def pause(_):
-            outcome = calls.pop(0)
-            if outcome:
-                raise outcome
+        def run_monitor(in_place):
+            fake = io.StringIO()
+            fake.isatty = lambda: False
+            calls = [None, KeyboardInterrupt()]
+            def pause(_):
+                outcome = calls.pop(0)
+                if outcome:
+                    raise outcome
+            with patch.object(monitor, 'get_positions', return_value=data), \
+                 patch.object(monitor, 'prices_for_positions', return_value={'EQUITY:AAPL': (150.0, None)}), \
+                 patch.object(store, 'default_db_path', return_value=self.dbpath), \
+                 patch.object(monitor.time, 'sleep', side_effect=pause), \
+                 patch.object(monitor.sys, 'stdout', fake):
+                monitor.monitor(interval=1, in_place=in_place)
+            return fake.getvalue()
+
+        default_output = run_monitor(False)
+        redraw_output = run_monitor(True)
+        self.assertNotIn('\\x1b[H\\x1b[2J', default_output)
+        self.assertEqual(redraw_output.count('\\x1b[H\\x1b[2J'), 2)
+        self.assertEqual(redraw_output.count('AAPL'), 2)
+
+    def test_monitor_once_does_not_clear_even_with_flag(self):
+        data = snapshot(position())
+        out = io.StringIO()
         with patch.object(monitor, 'get_positions', return_value=data), \
              patch.object(monitor, 'prices_for_positions', return_value={'EQUITY:AAPL': (150.0, None)}), \
              patch.object(store, 'default_db_path', return_value=self.dbpath), \
-             patch.object(monitor.time, 'sleep', side_effect=pause), \
-             patch.object(monitor.sys, 'stdout', fake):
-            monitor.monitor(interval=1)
-        value = fake.getvalue()
-        self.assertEqual(value.count('\x1b[H\x1b[2J'), 2)
-        self.assertEqual(value.count('AAPL'), 2)
+             redirect_stdout(out):
+            monitor.monitor(once=True, in_place=True)
+        self.assertNotIn('\\x1b[H\\x1b[2J', out.getvalue())
 
     def test_monitor_rejects_nonpositive_interval(self):
         with self.assertRaises(ValueError):
