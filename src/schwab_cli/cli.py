@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     positions_list_parser = positions_commands.add_parser("list", help="List positions")
     positions_list_parser.add_argument("--json", action="store_true")
     positions_list_parser.add_argument("--include-ids", action="store_true", help="Show locally assigned position UUIDs")
+    positions_list_parser.add_argument("--technicals", action="store_true", help="Include 5m RSI, session volume and 10-day ADV")
 
     positions_funds = positions_commands.add_parser("funds", help="Display account cash and buying power")
     positions_funds.add_argument("--json", action="store_true", help="Return labeled USD balances")
@@ -83,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     positions_monitor.add_argument("--include-ids", action="store_true", help="Show position UUIDs")
+    positions_monitor.add_argument("--technicals", action="store_true", help="Include 5m RSI, session volume and 10-day ADV")
     positions_monitor.add_argument("--in-place", action="store_true", help="Clear and redraw the same terminal area on each refresh")
 
     positions_monitor.add_argument(
@@ -178,7 +180,8 @@ def dispatch(args: argparse.Namespace) -> int:
         if args.positions_command == "list":
             from .positions import list_positions
 
-            list_positions(as_json=args.json, include_ids=args.include_ids)
+            list_positions(as_json=args.json, include_ids=args.include_ids,
+                           show_technicals=args.technicals)
             return 0
 
         if args.positions_command == "funds":
@@ -212,6 +215,7 @@ def dispatch(args: argparse.Namespace) -> int:
                 once=args.once,
                 include_ids=args.include_ids,
                 in_place=args.in_place,
+                show_technicals=args.technicals,
             )
             return 0
 
