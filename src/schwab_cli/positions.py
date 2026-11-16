@@ -7,6 +7,7 @@ from typing import Any
 from .api import get_positions
 from .dashboard_technicals import technicals_for_positions
 from .funds import render_funds
+from .option_structures import option_codes
 from .quotes import prices_for_positions
 from .store import PositionStore
 
@@ -64,6 +65,7 @@ def render_positions(
         lines.append(render_funds(item))
         if not positions:
             continue
+        codes = option_codes(sec.get("positions") or [])
         headings = ["Symbol", "A", "Long", "Short", "Avg trade", "Price", "Underlying", "Market value", "P/L"]
         if technicals is not None:
             headings.extend(["RSI 5m", "Vol sess", "ADV 10d"])
@@ -76,7 +78,8 @@ def render_positions(
             instrument_price, underlying_price = prices.get(key, (None, None))
             row = [
                 str(instrument.get("symbol") or "?"),
-                _asset_code(str(instrument.get("assetType") or "")),
+                (codes.get(key, "O") if str(instrument.get("assetType") or "").upper() == "OPTION"
+                 else _asset_code(str(instrument.get("assetType") or ""))),
                 _fmt(pos.get("longQuantity")),
                 _fmt(pos.get("shortQuantity")),
                 _fmt(pos.get("averagePrice")),
