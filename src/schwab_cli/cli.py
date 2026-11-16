@@ -87,6 +87,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch one snapshot instead of continuous monitoring",
     )
+    monitor_group = commands.add_parser("monitor", help="Monitoring services and alerts")
+    monitor_commands = monitor_group.add_subparsers(dest="monitor_command", required=True)
+    monitor_alert = monitor_commands.add_parser(
+        "alert", help="Notify when a monitored metric reaches a threshold"
+    )
+    monitor_target = monitor_alert.add_mutually_exclusive_group(required=True)
+    monitor_target.add_argument("--symbol", help="Market ticker to monitor")
+    monitor_target.add_argument("--position-id", help="Active local position UUID")
+    monitor_alert.add_argument("--metric", default="price", help="Registered metric (currently: price)")
+    monitor_level = monitor_alert.add_mutually_exclusive_group(required=True)
+    monitor_level.add_argument("--above", type=float, help="Notify at or above this level")
+    monitor_level.add_argument("--below", type=float, help="Notify at or below this level")
+    monitor_alert.add_argument("--interval", type=float, default=15.0, help="Poll interval in seconds")
+    monitor_alert.add_argument("--stdout", action="store_true", help="Print triggered alerts to stdout")
+    monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
+    monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
+
     market = commands.add_parser("market", help="Read Schwab market data")
     market_commands = market.add_subparsers(dest="market_command", required=True)
     history = market_commands.add_parser("history", help="Historical OHLCV prices")
@@ -183,6 +200,17 @@ def dispatch(args: argparse.Namespace) -> int:
                 in_place=args.in_place,
             )
             return 0
+
+    if args.command == "monitor" and args.monitor_command == "alert":
+        from .alerts import alert
+
+        alert(
+            symbol=args.symbol, position_id=args.position_id,
+            metric=args.metric, above=args.above, below=args.below,
+            interval=args.interval, once=args.once,
+            stdout=args.stdout, notify=args.notify,
+        )
+        return 0
 
     if args.command == "market" and args.market_command == "history":
         import json
