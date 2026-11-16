@@ -199,8 +199,19 @@ underlyings are fetched once per refresh. This opt-in feature makes additional
 market-data requests, including two price-history calls per distinct underlying
 per refresh, so use an appropriate monitor interval. Metric values use the
 latest available regular session and may be stale outside market hours.
-The compact asset code is **E** for equity and collective investment, **O**
-for options, and **?** for unrecognized asset types.
+The compact **A** column shows **E** for equities and collective investments,
+**C** for standalone calls, **P** for standalone puts, **CV** for bear verticals,
+**BV** for bull verticals, and **IC** for iron condors (including iron flies).
+Unidentified options display **O** and unrecognized non-option assets **?**.
+
+Option strategy codes are **inferred display labels**, not broker-provided
+strategy identities. The classifier requires matching underlying, expiration,
+balanced opposing quantities, and qualifying strike arrangements. If the
+combination is ambiguous, contracts remain labeled C/P individually. The
+original contract rows and position UUIDs are preserved, and no combined
+spread P&L is implied. Complex books with several overlapping strategies
+will need explicitly persisted strategy membership in TradePlans; this
+display-only inference is not a reliable basis for automated order execution.
 
 ## Account funds and position P&L
 
