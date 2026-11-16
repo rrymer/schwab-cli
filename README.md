@@ -8,7 +8,7 @@ Local command-line interface for the Charles Schwab Trader API.
 - macOS with Keychain credentials configured for Schwab OAuth
 - An HTTPS local callback configured for `https://127.0.0.1/callback` when using `schwab auth login`
 
-The package uses the Python standard library at runtime. Installation requires a build backend (Hatchling), which your package installer obtains from `pyproject.toml`. You do **not** need to install `requests`, `pytest`, or `setup.py`.
+The analytics module uses NumPy and pandas; the HTTP client uses the Python standard library. Installation requires a build backend (Hatchling), which your package installer obtains from `pyproject.toml`. Use `uv sync --locked` to install the pinned dependencies.
 
 ## Install for development (recommended)
 
@@ -97,7 +97,7 @@ checks configured, GitHub can block merges until those checks pass.
 
 Schwab credentials and tokens are accessed through the local macOS Keychain, not packaging metadata. Never commit OAuth secrets, tokens, or account details to Git. Previewing an order is the default; `positions add --submit` can transmit a **live** order.
 
-The CLI exposes `auth`, `positions`, `market`, and `options` commands. Market-data operations use authenticated **read-only GET** requests and cannot submit orders.
+The CLI exposes `auth`, `positions`, `monitor`, `analytics`, and `options` commands. Market-data operations use authenticated **read-only GET** requests and cannot submit orders.
 
 ## Position dashboard
 
@@ -173,19 +173,52 @@ be added later as evaluators that accept an `AlertTarget` and return a number;
 the threshold, polling and notification code requires no changes.
 The existing `positions monitor` CLI remains unchanged.
 
-## Market data
+## Analytics and market data
 
 After `uv sync`, use `uv run schwab` to keep the executable inside the project's managed environment:
 
 ```bash
-uv run schwab market history AAPL --limit 5
-uv run schwab market history AAPL --period-type month --period 3 --frequency-type daily
-uv run schwab market history AAPL --start 2026-01-01 --end 2026-06-01 --json
+uv run schwab analytics history AAPL --limit 5
+uv run schwab analytics history AAPL --period-type month --period 3 --frequency-type daily
+uv run schwab analytics history AAPL --start 2026-01-01 --end 2026-06-01 --json
 uv run schwab options expirations SPX
 uv run schwab options expirations SPX --include-0dte --json
 uv run schwab options chain SPX --type PUT --strike-count 5 --limit 10
 uv run schwab options chain SPX --from-date 2026-12-01 --to-date 2026-12-31 --json
 ```
+
+### Indicator metrics
+
+`analytics history` uses `--metric price` by default. With `price`, it keeps
+the familiar OHLCV history view, `--fields` CSV projection and `--json` raw response.
+
+Use `--metric rsi_N`, `atr_N` or `vwap_session` to calculate the latest
+indicator value from Schwab historical candles:
+
+```bash
+uv run schwab analytics history SPY
+uv run schwab analytics history SPY --metric price --fields datetime,close,volume
+uv run schwab analytics history SPY --metric rsi_14
+uv run schwab analytics history SPY --metric atr_14
+uv run schwab analytics history SPY --metric vwap_session
+```
+
+Indicator output is JSON with `symbol`, `metrics`, `as_of` (Unix
+milliseconds) and `sources` (`daily` or `intraday`). RSI uses Wilder
+smoothing over daily closing prices; ATR uses Wilder's smoothed true range;
+session VWAP is a volume-weighted *typical price of one-minute bars* for the
+latest regular US equity trading session, not trade-level VWAP.
+
+Indicator source windows are managed by the analytics service. The raw price
+history flags (`--period-type`, `--frequency-type`, `--start`, `--end`,
+`--extended-hours`, `--limit`, `--fields`, `--json`) currently apply
+only to `--metric price`; combining them with calculated metrics raises a
+validation error instead of silently ignoring requested settings. Indicators
+currently return the most recent calculated value, not an indicator time series.
+
+Python callers can use `schwab_cli.analytics_service.calculate_market` with a
+comma-separated selection such as `rsi_14,atr_14,vwap_session`. All requested
+metrics sharing a source reuse one historical fetch and one pandas DataFrame.
 
 ### Select arbitrary response fields
 
@@ -197,7 +230,7 @@ dependencies are needed.
 uv run schwab options chain '$SPX' --type PUT --strike-count 5 \
   --fields expirationDate,strikePrice,volatility,delta,openInterest --limit 10
 
-uv run schwab market history AAPL --fields datetime,open,high,low,close,volume --limit 5
+uv run schwab analytics history AAPL --fields datetime,open,high,low,close,volume --limit 5
 
 uv run schwab options expirations '$SPX' --fields expirationDate,daysToExpiration
 ```
