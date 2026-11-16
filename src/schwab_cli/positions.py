@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .api import get_positions
+from .funds import render_funds
 from .quotes import prices_for_positions
 from .store import PositionStore
 
@@ -39,6 +40,7 @@ def render_positions(
         number = str(sec.get("accountNumber", ""))
         label = f"...{number[-4:]}" if number else f"#{i}"
         lines.append(f"Account {label}: {len(positions)} position(s)")
+        lines.append(render_funds(item))
         if not positions:
             continue
         headings = ["Symbol", "Asset", "Long", "Short", "Avg trade", "Price", "Underlying", "Market value", "P/L"]
