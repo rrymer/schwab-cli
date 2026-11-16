@@ -227,6 +227,48 @@ user configuration. The existing command-line overrides remain available.
 Broker protocol enum sets and invariant validation still belong to the
 respective API modules.
 
+### Local configuration (`~/.schwab/config.yaml`)
+
+Override application defaults without modifying Python source. Create
+`~/.schwab/config.yaml` as a **flat YAML mapping** of uppercase setting
+names to scalar values:
+
+```yaml
+POSITION_POLL_SECONDS: 30
+ALERT_POLL_SECONDS: 15
+HTTP_TIMEOUT_SECONDS: 45
+DASHBOARD_RSI_PERIOD: 14
+DASHBOARD_ADV_SESSIONS: 10
+KEYCHAIN_ACCOUNT: "schwabbot"
+KEYCHAIN_SERVICE_CLIENT_ID: "client_id"
+KEYCHAIN_SERVICE_CLIENT_SECRET: "client_secret"
+KEYCHAIN_SERVICE_ACCESS_TOKEN: "access_token"
+KEYCHAIN_SERVICE_REFRESH_TOKEN: "refresh_token"
+KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT: "access_expires_at"
+```
+
+Only include settings you want to override. The file is optional: if absent,
+`conf.py` defaults are used. It is loaded when the process starts; restart
+`positions monitor` after editing it. CLI flags such as `--interval`
+still override the configured default. Unknown settings, invalid types,
+duplicate keys and malformed YAML cause a clear configuration error rather
+than silently falling back to unsafe defaults.
+
+For now, the configuration parser deliberately supports **flat scalar YAML
+only**, including quoted strings and inline comments. It does not support
+nested mappings, sequences, anchors or advanced YAML syntax. This avoids
+requiring another package dependency for simple settings.
+
+**Do not store Schwab passwords, OAuth tokens, client IDs or client secrets
+in this file.** `KEYCHAIN_ACCOUNT` and `KEYCHAIN_SERVICE_*` are names
+used to look up secrets already stored in macOS Keychain, not their values.
+Defaults preserve the previously used Keychain account `schwabbot` and
+service names `client_id`, `client_secret`, `access_token`,
+`refresh_token` and `access_expires_at`. Changing identifiers requires
+the corresponding Keychain records to exist under the new names. Existing
+`SCHWAB_KEYCHAIN_ACCOUNT` and `SCHWAB_REDIRECT_URI` environment
+overrides remain supported and take precedence over YAML.
+
 ## Account funds and position P&L
 
 `positions funds` shows six **reported currentBalances** amounts, in USD,
