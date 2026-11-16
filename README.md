@@ -75,6 +75,12 @@ GitHub Actions runs the credential-free unit tests for each pull request and
 push to `main`, with Python 3.11 and 3.14 on Linux. You can also launch a run
 manually from **Actions → Python tests → Run workflow**.
 
+The workflow also runs a **Ruff lint** job on `src/` and `tests/`. Initially it checks syntax, indentation-related errors, and undefined names (`E4`, `E7`, `E9`, `F821`–`F823`) without requiring a wholesale formatting cleanup. Locally, run:
+
+```bash
+uvx ruff check --select E4,E7,E9,F821,F822,F823 src tests
+```
+
 The workflow lives in `.github/workflows/tests.yml` and uses `uv sync --locked`
 followed by:
 
