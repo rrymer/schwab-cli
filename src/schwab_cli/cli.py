@@ -33,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     positions_list_parser.add_argument("--json", action="store_true")
     positions_list_parser.add_argument("--include-ids", action="store_true", help="Show locally assigned position UUIDs")
 
+    positions_funds = positions_commands.add_parser("funds", help="Display account cash and buying power")
+    positions_funds.add_argument("--json", action="store_true", help="Return labeled USD balances")
+
     positions_add = positions_commands.add_parser(
         "add",
         help="Preview or submit a single-leg order",
@@ -106,6 +109,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     analytics = commands.add_parser("analytics", help="Price history and market indicators")
     analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
+    calculate = analytics_commands.add_parser("calculate", help="Calculate live position metrics")
+    calculate.add_argument("--position-id", required=True, help="Active local position UUID")
+    calculate.add_argument("--metric", choices=("pnl",), required=True, help="Position metric (pnl)")
+
     history = analytics_commands.add_parser("history", help="Price candles or a technical indicator")
     history.add_argument("symbol")
     history.add_argument("--metric", default="price", help="price (default), rsi_N, atr_N, or vwap_session")
@@ -174,6 +181,12 @@ def dispatch(args: argparse.Namespace) -> int:
             list_positions(as_json=args.json, include_ids=args.include_ids)
             return 0
 
+        if args.positions_command == "funds":
+            from .funds import show_funds
+
+            show_funds(as_json=args.json)
+            return 0
+
         if args.positions_command == "add":
             from .orders import add_position
 
@@ -211,6 +224,12 @@ def dispatch(args: argparse.Namespace) -> int:
             interval=args.interval, once=args.once,
             stdout=args.stdout, notify=args.notify,
         )
+        return 0
+
+    if args.command == "analytics" and args.analytics_command == "calculate":
+        from .position_metrics import show_position_metric
+
+        show_position_metric(args.position_id, args.metric)
         return 0
 
     if args.command == "analytics" and args.analytics_command == "history":
