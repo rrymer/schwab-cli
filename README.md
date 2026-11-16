@@ -213,6 +213,20 @@ spread P&L is implied. Complex books with several overlapping strategies
 will need explicitly persisted strategy membership in TradePlans; this
 display-only inference is not a reliable basis for automated order execution.
 
+## Application defaults
+
+Operational defaults live in `src/schwab_cli/conf.py`. Change the values
+there instead of separately editing CLI parser defaults and Python function
+signatures. Key settings include `POSITION_POLL_SECONDS` and
+`ALERT_POLL_SECONDS` (both initially 15 seconds),
+`HTTP_TIMEOUT_SECONDS`, OAuth login timeout, market history defaults,
+output limits, RSI period, five-minute bar width, 10-session ADV lookback,
+regular US equity session boundaries, and default order parameters.
+These are Python module constants, **not** a secrets file or runtime-loaded
+user configuration. The existing command-line overrides remain available.
+Broker protocol enum sets and invariant validation still belong to the
+respective API modules.
+
 ## Account funds and position P&L
 
 `positions funds` shows six **reported currentBalances** amounts, in USD,
