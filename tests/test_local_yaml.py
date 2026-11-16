@@ -89,14 +89,14 @@ POSITION_POLL_SECONDS: 3.5
 
     def test_cli_creates_config_only_if_absent(self):
         target = Path(self.tmp.name) / ".schwab" / "config.yaml"
-        with patch.object(conf, "CONFIG_PATH", target), \\
-             patch("schwab_cli.cli.dispatch", return_value=0) as dispatch:
+        with (patch.object(conf, "CONFIG_PATH", target),
+              patch("schwab_cli.cli.dispatch", return_value=0) as dispatch):
             self.assertEqual(main(["positions", "list"]), 0)
             dispatch.assert_called_once()
         self.assertTrue(target.exists())
         target.write_text("POSITION_POLL_SECONDS: 33\\n", encoding="utf-8")
-        with patch.object(conf, "CONFIG_PATH", target), \\
-             patch("schwab_cli.cli.dispatch", return_value=0):
+        with (patch.object(conf, "CONFIG_PATH", target),
+              patch("schwab_cli.cli.dispatch", return_value=0)):
             self.assertEqual(main(["positions", "list"]), 0)
         self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\\n")
 
