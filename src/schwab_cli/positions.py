@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .api import get_positions
+from .dashboard_technicals import technicals_for_positions
 from .funds import render_funds
 from .quotes import prices_for_positions
 from .store import PositionStore
@@ -19,6 +20,25 @@ def _fmt(value: Any, digits: int = 2) -> str:
         return str(value)
 
 
+def _asset_code(asset_type: str) -> str:
+    kind = asset_type.upper()
+    if kind in {"EQUITY", "COLLECTIVE_INVESTMENT", "COLLECTIVE INVESTMENT"}:
+        return "E"
+    if kind == "OPTION":
+        return "O"
+    return "?"
+
+
+def _volume(value: float | None) -> str:
+    if value is None:
+        return "-"
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.1f}m"
+    if abs(value) >= 1000:
+        return f"{value / 1000:.1f}k"
+    return f"{value:.0f}"
+
+
 def render_positions(
     accounts: list[dict[str, Any]],
     identities: dict[str, str],
@@ -26,6 +46,7 @@ def render_positions(
     *,
     include_ids: bool = False,
     position_id: str | None = None,
+    technicals: dict[str, dict[str, float | None]] | None = None,
 ) -> str:
     """Render one snapshot without I/O, network access, or persistence."""
     lines = []
@@ -43,7 +64,9 @@ def render_positions(
         lines.append(render_funds(item))
         if not positions:
             continue
-        headings = ["Symbol", "Asset", "Long", "Short", "Avg trade", "Price", "Underlying", "Market value", "P/L"]
+        headings = ["Symbol", "A", "Long", "Short", "Avg trade", "Price", "Underlying", "Market value", "P/L"]
+        if technicals is not None:
+            headings.extend(["RSI 5m", "Vol sess", "ADV 10d"])
         if include_ids:
             headings.insert(0, "UUID")
         rows = []
@@ -53,7 +76,7 @@ def render_positions(
             instrument_price, underlying_price = prices.get(key, (None, None))
             row = [
                 str(instrument.get("symbol") or "?"),
-                str(instrument.get("assetType") or "?"),
+                _asset_code(str(instrument.get("assetType") or "")),
                 _fmt(pos.get("longQuantity")),
                 _fmt(pos.get("shortQuantity")),
                 _fmt(pos.get("averagePrice")),
@@ -62,6 +85,13 @@ def render_positions(
                 _fmt(pos.get("marketValue")),
                 _fmt(pos.get("currentDayProfitLoss")),
             ]
+            if technicals is not None:
+                values = technicals.get(key) or {}
+                row.extend([
+                    _fmt(values.get("rsi_5m"), 1),
+                    _volume(values.get("session_volume")),
+                    _volume(values.get("adv_10d")),
+                ])
             if include_ids:
                 row.insert(0, identities[key])
             rows.append(row)
@@ -74,6 +104,7 @@ def render_positions(
 
 def list_positions(
     *, account: str | None = None, as_json: bool = False, include_ids: bool = False,
+    show_technicals: bool = False,
 ) -> None:
     accounts = get_positions()
     if len(accounts) != 1:
@@ -82,6 +113,7 @@ def list_positions(
     with PositionStore() as store:
         identities = store.reconcile(positions)
     prices = prices_for_positions(positions)
+    technicals = technicals_for_positions(positions) if show_technicals else None
     if as_json:
         # Do not mutate Schwab's response; include calculated prices in distinct fields.
         payload = json.loads(json.dumps(accounts))
@@ -91,8 +123,11 @@ def list_positions(
             pos["currentPrice"] = instrument_price
             if (pos.get("instrument") or {}).get("assetType", "").upper() == "OPTION":
                 pos["underlyingPrice"] = underlying_price
+            if show_technicals:
+                pos["technicals"] = (technicals or {}).get(key, {})
             if include_ids:
                 pos["localPositionId"] = identities[key]
         print(json.dumps(payload, indent=2))
         return
-    print(render_positions(accounts, identities, prices, include_ids=include_ids))
+    print(render_positions(accounts, identities, prices, include_ids=include_ids,
+                           technicals=technicals))
