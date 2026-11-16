@@ -5,6 +5,7 @@ import json
 import math
 from typing import Any
 
+from . import conf
 from .api import get_positions
 from .store import PositionStore
 
@@ -32,7 +33,8 @@ def unrealized_pnl(position: dict[str, Any]) -> float | None:
         return None
     multiplier = _finite_number(instrument.get("multiplier"))
     if multiplier is None:
-        multiplier = 100.0 if instrument.get("assetType", "").upper() == "OPTION" else 1.0
+        multiplier = (conf.STANDARD_OPTION_MULTIPLIER
+                      if instrument.get("assetType", "").upper() == "OPTION" else 1.0)
     if multiplier <= 0 or long_qty < 0 or short_qty < 0 or (long_qty and short_qty):
         return None
     signed_cost = (long_qty - short_qty) * average * multiplier
