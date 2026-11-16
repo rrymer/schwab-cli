@@ -100,11 +100,13 @@ def alert(
     *, symbol: str | None = None, position_id: str | None = None,
     metric: str = "price", above: float | None = None,
     below: float | None = None, interval: float = 15.0,
-    once: bool = False,
+    once: bool = False, stdout: bool = False, notify: bool = False,
     metric_evaluators: dict[str, MetricEvaluator] | None = None,
     notifier: Callable[[str], None] | None = None,
 ) -> None:
     """Poll a registered metric and notify when its threshold is first met."""
+    if not (stdout or notify):
+        raise ValueError("Select at least one alert output: --stdout and/or --notify")
     target = AlertTarget(symbol=symbol, position_id=position_id)
     if interval <= 0 or not math.isfinite(interval):
         raise ValueError("Alert interval must be positive and finite")
@@ -122,8 +124,12 @@ def alert(
         while True:
             value = evaluator(target)
             if rule.update(value):
-                publish(f"Schwab alert: {label} {metric} {value:g} "
-                        f"{rule.direction} {rule.threshold:g}")
+                message = (f"Schwab alert: {label} {metric} {value:g} "
+                           f"{rule.direction} {rule.threshold:g}")
+                if stdout:
+                    print(message, flush=True)
+                if notify:
+                    publish(message)
             if once:
                 return
             time.sleep(interval)
