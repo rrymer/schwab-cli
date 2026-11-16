@@ -350,8 +350,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .api import SchwabAPIError
     from .auth import AuthError
     try:
+        conf.ensure_config_file()
         return dispatch(args)
-    except (CommandError, ValueError, SchwabAPIError, AuthError) as exc:
+    except (CommandError, ValueError, OSError, SchwabAPIError, AuthError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
         return 1
 
