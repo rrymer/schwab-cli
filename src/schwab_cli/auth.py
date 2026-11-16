@@ -14,6 +14,8 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from . import conf
+
 AUTHORIZE_URL = "https://api.schwabapi.com/v1/oauth/authorize"
 TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
 REDIRECT_URI = os.getenv("SCHWAB_REDIRECT_URI", "https://127.0.0.1/callback")
@@ -73,7 +75,7 @@ def _token_request(data: dict[str, str]) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=conf.HTTP_TIMEOUT_SECONDS) as response:
             payload = json.load(response)
     except urllib.error.HTTPError as exc:
         # Do not print token request payloads or credentials.
@@ -91,7 +93,7 @@ def _save_tokens(payload: dict, *, prior_refresh: str | None = None) -> None:
     if refresh:
         set_secret("refresh_token", refresh)
     set_secret("access_token", payload["access_token"])
-    expires_in = int(payload.get("expires_in", 1800))
+    expires_in = int(payload.get("expires_in", conf.ACCESS_TOKEN_FALLBACK_SECONDS))
     set_secret("access_expires_at", str(int(time.time()) + expires_in))
 
 
@@ -122,7 +124,7 @@ def get_access_token(*, allow_interactive: bool = False) -> str:
     token = get_secret("access_token")
     expires = get_secret("access_expires_at")
     try:
-        valid = token is not None and expires is not None and int(expires) > time.time() + 60
+        valid = token is not None and expires is not None and int(expires) > time.time() + conf.TOKEN_REFRESH_BUFFER_SECONDS
     except ValueError:
         valid = False
     if valid:
@@ -135,7 +137,7 @@ def get_access_token(*, allow_interactive: bool = False) -> str:
     return login()
 
 
-def login(*, timeout: int = 180) -> str:
+def login(*, timeout: int = conf.LOGIN_TIMEOUT_SECONDS) -> str:
     client_id, _ = _credentials()
     state = secrets.token_urlsafe(32)
     outcome: dict[str, str] = {}
@@ -175,7 +177,7 @@ def login(*, timeout: int = 180) -> str:
         server = HTTPServer((CALLBACK_HOST, CALLBACK_PORT), CallbackHandler)
     except OSError as exc:
         raise AuthError(f"Cannot listen on {CALLBACK_HOST}:{CALLBACK_PORT}: {exc}") from exc
-    server.timeout = 0.5
+    server.timeout = conf.CALLBACK_POLL_SECONDS
     query = urllib.parse.urlencode({
         "client_id": client_id,
         "redirect_uri": REDIRECT_URI,
