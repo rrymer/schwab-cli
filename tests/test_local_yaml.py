@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from schwab_cli import auth, conf
+from schwab_cli.cli import main
 
 
 class LocalYamlTests(unittest.TestCase):
@@ -72,6 +73,32 @@ POSITION_POLL_SECONDS: 3.5
         for invalid in ("- one\\n- two\\n", "42\\n", "KEYCHAIN_ACCOUNT: [a, b]\\n"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 conf.load_overrides(self.write(invalid))
+
+    def test_first_run_writes_complete_private_file_without_secrets(self):
+        config_path = Path(self.tmp.name) / ".schwab" / "config.yaml"
+        self.assertTrue(conf.ensure_config_file(config_path))
+        self.assertEqual(config_path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(config_path.parent.stat().st_mode & 0o777, 0o700)
+        parsed = conf.load_overrides(config_path)
+        self.assertEqual(parsed, conf._DEFAULTS)
+        text = config_path.read_text(encoding="utf-8")
+        self.assertIn("POSITION_POLL_SECONDS:", text)
+        self.assertNotIn("client_secret: ", text)
+        self.assertFalse(conf.ensure_config_file(config_path))
+        self.assertEqual(config_path.read_text(encoding="utf-8"), text)
+
+    def test_cli_creates_config_only_if_absent(self):
+        target = Path(self.tmp.name) / ".schwab" / "config.yaml"
+        with patch.object(conf, "CONFIG_PATH", target), \\
+             patch("schwab_cli.cli.dispatch", return_value=0) as dispatch:
+            self.assertEqual(main(["positions", "list"]), 0)
+            dispatch.assert_called_once()
+        self.assertTrue(target.exists())
+        target.write_text("POSITION_POLL_SECONDS: 33\\n", encoding="utf-8")
+        with patch.object(conf, "CONFIG_PATH", target), \\
+             patch("schwab_cli.cli.dispatch", return_value=0):
+            self.assertEqual(main(["positions", "list"]), 0)
+        self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\\n")
 
     def test_auth_service_mapping_retains_existing_key_names(self):
         self.assertEqual(auth._KEYCHAIN_SERVICES["client_id"], conf.KEYCHAIN_SERVICE_CLIENT_ID)
