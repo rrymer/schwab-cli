@@ -4,15 +4,18 @@ from __future__ import annotations
 import sys
 import time
 
+from . import conf
 from .api import get_positions
+from .dashboard_technicals import technicals_for_positions
 from .positions import render_positions
 from .quotes import prices_for_positions
 from .store import PositionStore
 
 
 def monitor(
-    *, position_id: str | None = None, interval: float = 15.0,
+    *, position_id: str | None = None, interval: float = conf.POSITION_POLL_SECONDS,
     once: bool = False, include_ids: bool = False, in_place: bool = False,
+    show_technicals: bool = False,
 ) -> None:
     if interval <= 0:
         raise ValueError("interval must be greater than zero")
@@ -38,8 +41,10 @@ def monitor(
                 if not position_id or ids[PositionStore.key(pos.get("instrument") or {})] == position_id
             ]
             quotes = prices_for_positions(selected)
+            metrics = technicals_for_positions(selected) if show_technicals and not unknown else None
             display = (unknown or render_positions(
-                accounts, ids, quotes, position_id=position_id, include_ids=include_ids
+                accounts, ids, quotes, position_id=position_id, include_ids=include_ids,
+                technicals=metrics,
             ))
             # Explicit opt-in: never guess terminal capabilities from isatty().
             # Keep --once useful for scripts and deterministic tests.

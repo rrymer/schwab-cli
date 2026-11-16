@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from . import conf
 from .api import get_positions
 from .market_data import _symbol
 from .quotes import get_quotes, quote_price
@@ -98,8 +99,8 @@ def notify_terminal(message: str, *, stream=None) -> None:
 
 def alert(
     *, symbol: str | None = None, position_id: str | None = None,
-    metric: str = "price", above: float | None = None,
-    below: float | None = None, interval: float = 15.0,
+    metric: str = conf.DEFAULT_ALERT_METRIC, above: float | None = None,
+    below: float | None = None, interval: float = conf.ALERT_POLL_SECONDS,
     once: bool = False, stdout: bool = False, notify: bool = False,
     metric_evaluators: dict[str, MetricEvaluator] | None = None,
     notifier: Callable[[str], None] | None = None,

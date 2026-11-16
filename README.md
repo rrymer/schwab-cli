@@ -173,6 +173,155 @@ be added later as evaluators that accept an `AlertTarget` and return a number;
 the threshold, polling and notification code requires no changes.
 The existing `positions monitor` CLI remains unchanged.
 
+## Optional position technicals
+
+Use `--technicals` with either snapshot or monitor to append **RSI 5m**,
+**Vol sess**, and **ADV 10d** columns:
+
+```bash
+uv run schwab positions list --technicals
+uv run schwab positions monitor --technicals --in-place --interval 30
+uv run schwab positions list --technicals --json
+```
+
+`RSI 5m` is Wilder RSI(14) over regular-session five-minute close prices.
+`Vol sess` sums available five-minute volume for the **latest available**
+regular US equity session, which may be partial. `ADV 10d` is the mean
+of the **previous ten completed daily trading bars**, excluding that session.
+When there are too few completed daily bars, an unavailable underlying, or an
+unsuitable history response, metrics display `-` rather than invented values.
+Volume columns abbreviate thousands (`k`) and millions (`m`).
+
+For option positions, these are **underlying equity** indicators rather than
+option-contract volume or RSI. The underlying comes from Schwab's option
+quote reference; the system does not guess it from the OCC symbol. Duplicate
+underlyings are fetched once per refresh. This opt-in feature makes additional
+market-data requests, including two price-history calls per distinct underlying
+per refresh, so use an appropriate monitor interval. Metric values use the
+latest available regular session and may be stale outside market hours.
+The compact **A** column shows **E** for equities and collective investments,
+**C** for standalone calls, **P** for standalone puts, **CV** for bear verticals,
+**BV** for bull verticals, and **IC** for iron condors (including iron flies).
+Unidentified options display **O** and unrecognized non-option assets **?**.
+
+Option strategy codes are **inferred display labels**, not broker-provided
+strategy identities. The classifier requires matching underlying, expiration,
+balanced opposing quantities, and qualifying strike arrangements. If the
+combination is ambiguous, contracts remain labeled C/P individually. The
+original contract rows and position UUIDs are preserved, and no combined
+spread P&L is implied. Complex books with several overlapping strategies
+will need explicitly persisted strategy membership in TradePlans; this
+display-only inference is not a reliable basis for automated order execution.
+
+## Application defaults
+
+Operational defaults live in `src/schwab_cli/conf.py`. Change the values
+there instead of separately editing CLI parser defaults and Python function
+signatures. Key settings include `POSITION_POLL_SECONDS` and
+`ALERT_POLL_SECONDS` (both initially 15 seconds),
+`HTTP_TIMEOUT_SECONDS`, OAuth login timeout, market history defaults,
+output limits, RSI period, five-minute bar width, 10-session ADV lookback,
+regular US equity session boundaries, and default order parameters.
+These are Python module constants, **not** a secrets file or runtime-loaded
+user configuration. The existing command-line overrides remain available.
+Broker protocol enum sets and invariant validation still belong to the
+respective API modules.
+
+### Local configuration (`~/.schwab/config.yaml`)
+
+Run `uv run schwab init` to explicitly create the default configuration without
+contacting Schwab or reading Keychain. If the file already exists, the command
+reports that and leaves it unchanged. The ordinary first-run initialization
+remains available as well.
+
+Override application defaults without modifying Python source. On the first
+normal CLI execution, the application creates `~/.schwab/config.yaml` with
+all default settings in an editable YAML mapping (directory mode `0700`,
+file mode `0600`). An existing configuration file is **never overwritten**.
+For example, customize these entries:
+
+```yaml
+POSITION_POLL_SECONDS: 30
+ALERT_POLL_SECONDS: 15
+HTTP_TIMEOUT_SECONDS: 45
+DASHBOARD_RSI_PERIOD: 14
+DASHBOARD_ADV_SESSIONS: 10
+KEYCHAIN_ACCOUNT: "schwabbot"
+KEYCHAIN_SERVICE_CLIENT_ID: "client_id"
+KEYCHAIN_SERVICE_CLIENT_SECRET: "client_secret"
+KEYCHAIN_SERVICE_ACCESS_TOKEN: "access_token"
+KEYCHAIN_SERVICE_REFRESH_TOKEN: "refresh_token"
+KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT: "access_expires_at"
+```
+
+You can delete individual entries to fall back to built-in defaults. Library
+imports never create the file. Configuration is read **once per Python
+process** and kept as in-memory module values, not re-read on every dashboard
+poll. The operating system also caches filesystem reads; there is no need
+for a separate system-wide cache. Restart a running `positions monitor`
+after editing the file. CLI flags such as `--interval`
+still override the configured default. Unknown settings, invalid types,
+malformed YAML and unsupported values cause a clear configuration error rather
+than silently falling back to unsafe defaults.
+
+Configuration uses **PyYAML `safe_load`**. Normal YAML string syntax,
+comments, and aliases work, but the application accepts only a top-level
+mapping of supported settings with scalar values. Nested mappings and lists
+are rejected by validation. Duplicate mapping keys follow PyYAML's normal
+last-value-wins behavior.
+
+**Do not store Schwab passwords, OAuth tokens, client IDs or client secrets
+in this file.** `KEYCHAIN_ACCOUNT` and `KEYCHAIN_SERVICE_*` are names
+used to look up secrets already stored in macOS Keychain, not their values.
+Defaults preserve the previously used Keychain account `schwabbot` and
+service names `client_id`, `client_secret`, `access_token`,
+`refresh_token` and `access_expires_at`. Changing identifiers requires
+the corresponding Keychain records to exist under the new names. Existing
+`SCHWAB_KEYCHAIN_ACCOUNT` and `SCHWAB_REDIRECT_URI` environment
+overrides remain supported and take precedence over YAML.
+
+## Account funds and position P&L
+
+`positions funds` shows six **reported currentBalances** amounts, in USD,
+on one compact line. The same line appears above the position rows in both
+`positions list` and `positions monitor`:
+
+```bash
+uv run schwab positions funds
+uv run schwab positions funds --json
+uv run schwab positions list
+uv run schwab positions monitor --in-place
+```
+
+Example: `C:12.5k  T:8.0k  A:7.0k  B:24.0k  O:3.0k  D:50.0k`
+
+Abbreviations: **C** cash balance (`cashBalance`), **T** cash available to
+trade (`cashAvailableForTrading`), **A** available funds (`availableFunds`),
+**B** buying power (`buyingPower`), **O** option buying power
+(`optionBuyingPower`), and **D** day trading buying power
+(`dayTradingBuyingPower`). Figures are thousands of USD rounded to one
+decimal; `-` means not supplied or unusable, **not zero**. These balances are
+not interchangeable and can vary by account type and margin status. JSON
+returns full numeric precision and canonical Schwab field names.
+
+For live, single-position unrealized P&L use:
+
+```bash
+uv run schwab positions list --include-ids
+uv run schwab analytics calculate --position-id YOUR-UUID --metric pnl
+```
+
+`pnl` currently means **unrealized average-cost P&L in USD**, not daily P&L,
+cumulative realized trade P&L or a multi-leg strategy ledger. It is computed
+from Schwab's signed position market value, signed net quantity, aggregate
+average purchase/sale price and contract multiplier (default 100 for standard
+options, 1 for stocks). Unknown inputs raise an error instead of generating
+a made-up number. Closing commissions, fees, and previously realized executions
+are **not** included. This metric is available through
+`schwab_cli.position_metrics.calculate_position(position_id, "pnl")` for
+future TradePlans use and deliberately is not a history metric. Values reflect
+the latest fetched Schwab account snapshot, not a continuously executed fill.
+
 ## Analytics and market data
 
 After `uv sync`, use `uv run schwab` to keep the executable inside the project's managed environment:

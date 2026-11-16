@@ -6,12 +6,14 @@ the latest valid scalar; API fetching and output formatting belong elsewhere.
 """
 from __future__ import annotations
 
+from . import conf
+
 import numpy as np
 import pandas as pd
 
-_EASTERN = "America/New_York"
-_SESSION_OPEN_MINUTE = 9 * 60 + 30
-_SESSION_CLOSE_MINUTE = 16 * 60
+_EASTERN = conf.MARKET_TIMEZONE
+_SESSION_OPEN_MINUTE = conf.REGULAR_SESSION_START_MINUTE
+_SESSION_CLOSE_MINUTE = conf.REGULAR_SESSION_END_MINUTE
 
 
 def to_frame(candles: list[dict] | pd.DataFrame) -> pd.DataFrame:

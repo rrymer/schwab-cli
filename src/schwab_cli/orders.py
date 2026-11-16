@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from . import conf
 from .api import BASE_URL, SchwabAPIError, account_numbers
 from .auth import get_access_token
 from .store import PositionStore
@@ -72,8 +73,8 @@ class OrderActivity:
 
 @dataclass
 class SchwabOrder:
-    session: str = "NORMAL"
-    duration: str = "DAY"
+    session: str = conf.DEFAULT_SESSION
+    duration: str = conf.DEFAULT_DURATION
     orderType: str = "MARKET"
     orderStrategyType: str = "SINGLE"
     complexOrderStrategyType: str = "NONE"
@@ -139,9 +140,9 @@ def _positive_quantity(value: float) -> float:
 
 
 def build_single_order(*, symbol: str, asset_type: str, instruction: str,
-                       quantity: float, order_type: str = "LIMIT",
-                       price: float | None = None, session: str = "NORMAL",
-                       duration: str = "DAY") -> SchwabOrder:
+                       quantity: float, order_type: str = conf.DEFAULT_ORDER_TYPE,
+                       price: float | None = None, session: str = conf.DEFAULT_SESSION,
+                       duration: str = conf.DEFAULT_DURATION) -> SchwabOrder:
     """Build a single-leg order; no network request is performed."""
     symbol = symbol.strip().upper()
     if not symbol:
@@ -201,7 +202,7 @@ def submit_order(order: SchwabOrder) -> str | None:
         method="POST",
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=conf.HTTP_TIMEOUT_SECONDS) as response:
             return response.headers.get("Location")
     except HTTPError as exc:
         # Deliberately avoid dumping Schwab response bodies, which may contain account data.
@@ -214,8 +215,8 @@ def submit_order(order: SchwabOrder) -> str | None:
 
 
 def add_position(*, symbol: str, asset_type: str, instruction: str,
-                 quantity: float, order_type: str = "LIMIT", price: float | None = None,
-                 session: str = "NORMAL", duration: str = "DAY",
+                 quantity: float, order_type: str = conf.DEFAULT_ORDER_TYPE, price: float | None = None,
+                 session: str = conf.DEFAULT_SESSION, duration: str = conf.DEFAULT_DURATION,
                  submit: bool = False) -> None:
     order = build_single_order(
         symbol=symbol, asset_type=asset_type, instruction=instruction,

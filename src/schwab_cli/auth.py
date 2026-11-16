@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import secrets
 import subprocess
 import threading
@@ -14,13 +13,18 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from . import conf
+
 AUTHORIZE_URL = "https://api.schwabapi.com/v1/oauth/authorize"
 TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
-REDIRECT_URI = os.getenv("SCHWAB_REDIRECT_URI", "https://127.0.0.1/callback")
-CALLBACK_HOST = "127.0.0.1"
-CALLBACK_PORT = 8765
-KEYCHAIN_ACCOUNT = os.getenv("SCHWAB_KEYCHAIN_ACCOUNT", "schwabbot")
-KEYCHAIN_PREFIX = os.getenv("SCHWAB_KEYCHAIN_PREFIX", "schwabbot")
+
+_KEYCHAIN_SERVICES = {
+    "client_id": conf.KEYCHAIN_SERVICE_CLIENT_ID,
+    "client_secret": conf.KEYCHAIN_SERVICE_CLIENT_SECRET,
+    "access_token": conf.KEYCHAIN_SERVICE_ACCESS_TOKEN,
+    "refresh_token": conf.KEYCHAIN_SERVICE_REFRESH_TOKEN,
+    "access_expires_at": conf.KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT,
+}
 
 
 class AuthError(RuntimeError):
@@ -30,12 +34,12 @@ class AuthError(RuntimeError):
 def _keychain(service: str, *, value: str | None = None) -> str | None:
     if value is None:
         result = subprocess.run(
-            ["security", "find-generic-password", "-a", service, "-s", KEYCHAIN_ACCOUNT, "-w"],
+            ["security", "find-generic-password", "-a", service, "-s", conf.KEYCHAIN_ACCOUNT, "-w"],
             capture_output=True, text=True,
         )
         return result.stdout.rstrip("\n") if result.returncode == 0 else None
     result = subprocess.run(
-        ["security", "add-generic-password", "-U", "-a", service, "-s", KEYCHAIN_ACCOUNT, "-w", value],
+        ["security", "add-generic-password", "-U", "-a", service, "-s", conf.KEYCHAIN_ACCOUNT, "-w", value],
         capture_output=True, text=True,
     )
     if result.returncode:
@@ -44,18 +48,18 @@ def _keychain(service: str, *, value: str | None = None) -> str | None:
 
 
 def get_secret(name: str) -> str | None:
-    return _keychain(f"{name}")
+    return _keychain(_KEYCHAIN_SERVICES[name])
 
 
 def set_secret(name: str, value: str) -> None:
-    _keychain(f"{name}", value=value)
+    _keychain(_KEYCHAIN_SERVICES[name], value=value)
 
 
 def _credentials() -> tuple[str, str]:
     client_id = get_secret("client_id")
     client_secret = get_secret("client_secret")
     if not client_id or not client_secret:
-        raise AuthError("Missing Keychain credentials. Store schwabbot.client_id and schwabbot.client_secret first.")
+        raise AuthError("Missing Keychain credentials. Store the configured Keychain client_id and client_secret services first.")
     return client_id, client_secret
 
 
@@ -73,7 +77,7 @@ def _token_request(data: dict[str, str]) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=conf.HTTP_TIMEOUT_SECONDS) as response:
             payload = json.load(response)
     except urllib.error.HTTPError as exc:
         # Do not print token request payloads or credentials.
@@ -91,7 +95,7 @@ def _save_tokens(payload: dict, *, prior_refresh: str | None = None) -> None:
     if refresh:
         set_secret("refresh_token", refresh)
     set_secret("access_token", payload["access_token"])
-    expires_in = int(payload.get("expires_in", 1800))
+    expires_in = int(payload.get("expires_in", conf.ACCESS_TOKEN_FALLBACK_SECONDS))
     set_secret("access_expires_at", str(int(time.time()) + expires_in))
 
 
@@ -122,7 +126,7 @@ def get_access_token(*, allow_interactive: bool = False) -> str:
     token = get_secret("access_token")
     expires = get_secret("access_expires_at")
     try:
-        valid = token is not None and expires is not None and int(expires) > time.time() + 60
+        valid = token is not None and expires is not None and int(expires) > time.time() + conf.TOKEN_REFRESH_BUFFER_SECONDS
     except ValueError:
         valid = False
     if valid:
@@ -135,7 +139,7 @@ def get_access_token(*, allow_interactive: bool = False) -> str:
     return login()
 
 
-def login(*, timeout: int = 180) -> str:
+def login(*, timeout: int = conf.LOGIN_TIMEOUT_SECONDS) -> str:
     client_id, _ = _credentials()
     state = secrets.token_urlsafe(32)
     outcome: dict[str, str] = {}
@@ -172,19 +176,19 @@ def login(*, timeout: int = 180) -> str:
             pass
 
     try:
-        server = HTTPServer((CALLBACK_HOST, CALLBACK_PORT), CallbackHandler)
+        server = HTTPServer((conf.CALLBACK_HOST, conf.CALLBACK_PORT), CallbackHandler)
     except OSError as exc:
-        raise AuthError(f"Cannot listen on {CALLBACK_HOST}:{CALLBACK_PORT}: {exc}") from exc
-    server.timeout = 0.5
+        raise AuthError(f"Cannot listen on {conf.CALLBACK_HOST}:{conf.CALLBACK_PORT}: {exc}") from exc
+    server.timeout = conf.CALLBACK_POLL_SECONDS
     query = urllib.parse.urlencode({
         "client_id": client_id,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": conf.REDIRECT_URI,
         "response_type": "code",
         "state": state,
     })
     url = f"{AUTHORIZE_URL}?{query}"
     print("Opening Schwab authorization in your browser...")
-    print(f"Waiting up to {timeout} seconds for HTTPS callback at {REDIRECT_URI}")
+    print(f"Waiting up to {timeout} seconds for HTTPS callback at {conf.REDIRECT_URI}")
     try:
         webbrowser.open(url)
         deadline = time.monotonic() + timeout
@@ -199,7 +203,7 @@ def login(*, timeout: int = 180) -> str:
     payload = _token_request({
         "grant_type": "authorization_code",
         "code": outcome["code"],
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": conf.REDIRECT_URI,
     })
     _save_tokens(payload)
     return payload["access_token"]

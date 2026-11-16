@@ -10,6 +10,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from . import conf
 from .analytics import atr, rsi, session_vwap, session_last_timestamp, to_frame
 from .field_selection import parse_fields
 from .market_data import get_price_history
@@ -59,9 +60,14 @@ def calculate_market(
         if source in candles_by_source:
             continue
         options = (
-            {"period_type": "year", "period": 1, "frequency_type": "daily", "frequency": 1}
+            {"period_type": conf.ANALYTICS_DAILY_PERIOD_TYPE,
+             "period": conf.ANALYTICS_DAILY_PERIOD,
+             "frequency_type": conf.HISTORY_FREQUENCY_TYPE,
+             "frequency": conf.HISTORY_FREQUENCY}
             if source == "daily" else
-            {"period_type": "day", "period": 1, "frequency_type": "minute", "frequency": 1}
+            {"period_type": conf.ANALYTICS_INTRADAY_PERIOD_TYPE,
+             "period": conf.ANALYTICS_INTRADAY_PERIOD,
+             "frequency_type": "minute", "frequency": 1}
         )
         response = loader(normalized, **options)
         candles = response.get("candles")
