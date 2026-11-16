@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+from . import conf
 from .auth import get_access_token
 
 BASE_URL = "https://api.schwabapi.com/trader/v1"
@@ -32,7 +33,7 @@ def _get(path: str, *, params: dict[str, str] | None = None) -> Any:
         method="GET",
     )
     try:
-        with urlopen(req, timeout=30) as response:
+        with urlopen(req, timeout=conf.HTTP_TIMEOUT_SECONDS) as response:
             return json.load(response)
     except HTTPError as exc:
         # Do not echo response bodies: they may contain account information.
