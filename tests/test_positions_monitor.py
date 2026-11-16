@@ -37,6 +37,36 @@ class PositionPresentationTests(unittest.TestCase):
         self.assertIn(uid, output.getvalue())
         self.assertNotIn('localPositionId', data[0]['securitiesAccount']['positions'][0])
 
+    def test_average_trade_price_in_list_and_monitor(self):
+        data = snapshot(position())
+        data[0]['securitiesAccount']['positions'][0]['averagePrice'] = 148.75
+        with patch.object(positions, 'get_positions', return_value=data), \
+             patch.object(positions, 'prices_for_positions', return_value={'EQUITY:AAPL': (154.30, None)}), \
+             patch.object(store, 'default_db_path', return_value=self.dbpath), \
+             redirect_stdout(io.StringIO()) as output:
+            positions.list_positions()
+        self.assertIn('Avg trade', output.getvalue())
+        self.assertIn('148.75', output.getvalue())
+        self.assertIn('154.30', output.getvalue())
+
+        with patch.object(monitor, 'get_positions', return_value=data), \
+             patch.object(monitor, 'prices_for_positions', return_value={'EQUITY:AAPL': (154.30, None)}), \
+             patch.object(store, 'default_db_path', return_value=self.dbpath), \
+             redirect_stdout(io.StringIO()) as output:
+            monitor.monitor(once=True)
+        self.assertIn('Avg trade', output.getvalue())
+        self.assertIn('148.75', output.getvalue())
+
+    def test_missing_average_price_displays_dash(self):
+        data = snapshot(position())
+        with patch.object(positions, 'get_positions', return_value=data), \
+             patch.object(positions, 'prices_for_positions', return_value={'EQUITY:AAPL': (154.30, None)}), \
+             patch.object(store, 'default_db_path', return_value=self.dbpath), \
+             redirect_stdout(io.StringIO()) as output:
+            positions.list_positions()
+        self.assertIn('Avg trade', output.getvalue())
+        self.assertIn('-', output.getvalue())
+
     def test_list_json_omits_ids_by_default(self):
         import json
         data = snapshot(position())
