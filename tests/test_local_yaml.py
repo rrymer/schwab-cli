@@ -102,6 +102,24 @@ POSITION_POLL_SECONDS: 3.5
             self.assertEqual(main(["positions", "list"]), 0)
         self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\n")
 
+    def test_init_command_is_explicit_and_idempotent(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from schwab_cli.cli import build_parser
+
+        target = Path(self.tmp.name) / ".schwab" / "config.yaml"
+        self.assertEqual(build_parser().parse_args(["init"]).command, "init")
+        with patch.object(conf, "CONFIG_PATH", target), redirect_stdout(StringIO()) as output:
+            self.assertEqual(main(["init"]), 0)
+        self.assertIn("Created", output.getvalue())
+        self.assertTrue(target.exists())
+
+        target.write_text("POSITION_POLL_SECONDS: 33\\n", encoding="utf-8")
+        with patch.object(conf, "CONFIG_PATH", target), redirect_stdout(StringIO()) as output:
+            self.assertEqual(main(["init"]), 0)
+        self.assertIn("Already exists", output.getvalue())
+        self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\\n")
+
     def test_auth_service_mapping_retains_existing_key_names(self):
         self.assertEqual(auth._KEYCHAIN_SERVICES["client_id"], conf.KEYCHAIN_SERVICE_CLIENT_ID)
         self.assertEqual(auth._KEYCHAIN_SERVICES["refresh_token"], conf.KEYCHAIN_SERVICE_REFRESH_TOKEN)
