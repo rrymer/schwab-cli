@@ -75,6 +75,36 @@ Schwab credentials and tokens are accessed through the local macOS Keychain, not
 
 The CLI exposes `auth`, `positions`, `market`, and `options` commands. Market-data operations use authenticated **read-only GET** requests and cannot submit orders.
 
+## Position dashboard
+
+Use `positions list` for one snapshot, or `positions monitor` to redraw it in
+place every 15 seconds (adjustable with `--interval`). The default display omits
+the long internal UUID column; use `--include-ids` when you need to reference
+a position for monitoring or future position analytics:
+
+```bash
+uv run schwab positions list
+uv run schwab positions list --include-ids
+uv run schwab positions monitor --interval 10
+uv run schwab positions monitor <position-uuid> --include-ids --once
+```
+
+Position rows display **Price** and **Underlying** alongside quantity, market
+value, and daily P/L. Equity/ETF price uses Schwab's latest quoted trade,
+falling back to mark if unavailable. Option price prefers the option **mark**
+(falling back to last trade). For options, the Underlying column uses Schwab's
+quoted underlying reference and latest underlying quote, falling back to the
+option quote's embedded `underlyingPrice`. Missing quotes display `-`, not a
+made-up zero. Quotes are batched per snapshot when possible. The current price
+may be delayed, and an option mark is a valuation estimate, not an executable
+trade price.
+
+`positions monitor` clears and redraws only in an interactive terminal.
+With `--once` or redirected output, it emits normal text without terminal
+escape codes. Ctrl+C stops monitoring. `positions list --json` includes
+`currentPrice` and (on options) `underlyingPrice`, but only includes
+`localPositionId` when `--include-ids` is supplied.
+
 ## Market data
 
 After `uv sync`, use `uv run schwab` to keep the executable inside the project's managed environment:
