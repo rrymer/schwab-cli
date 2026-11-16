@@ -104,10 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
     monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
 
-    market = commands.add_parser("market", help="Read Schwab market data")
-    market_commands = market.add_subparsers(dest="market_command", required=True)
-    history = market_commands.add_parser("history", help="Historical OHLCV prices")
+    analytics = commands.add_parser("analytics", help="Price history and market indicators")
+    analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
+    history = analytics_commands.add_parser("history", help="Price candles or a technical indicator")
     history.add_argument("symbol")
+    history.add_argument("--metric", default="price", help="price (default), rsi_N, atr_N, or vwap_session")
     history.add_argument("--period-type", choices=("day", "month", "year", "ytd"), default="year")
     history.add_argument("--period", type=int, default=1)
     history.add_argument("--frequency-type", choices=("minute", "daily", "weekly", "monthly"), default="daily")
@@ -212,7 +213,7 @@ def dispatch(args: argparse.Namespace) -> int:
         )
         return 0
 
-    if args.command == "market" and args.market_command == "history":
+    if args.command == "analytics" and args.analytics_command == "history":
         import json
         from datetime import date
         from .market_data import get_price_history
@@ -220,6 +221,20 @@ def dispatch(args: argparse.Namespace) -> int:
 
         if args.limit < 0:
             raise CommandError("--limit must be nonnegative")
+        if args.metric != "price":
+            from .analytics_service import calculate_market, resolve_metric
+
+            # Reject incompatible candle-only settings rather than silently ignore them.
+            resolve_metric(args.metric)
+            if args.fields is not None or args.json:
+                raise CommandError("--fields and --json only apply to --metric price")
+            if (args.period_type, args.period, args.frequency_type, args.frequency,
+                args.start, args.end, args.extended_hours, args.limit) != (
+                "year", 1, "daily", 1, None, None, False, 10
+            ):
+                raise CommandError("History range/frequency/limit options only apply to --metric price")
+            print(json.dumps(calculate_market(args.symbol, (args.metric,)), indent=2))
+            return 0
         fields = parse_fields(args.fields) if args.fields is not None else None
         result = get_price_history(
             args.symbol, period_type=args.period_type, period=args.period,
