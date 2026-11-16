@@ -12,11 +12,10 @@ from .store import PositionStore
 
 def monitor(
     *, position_id: str | None = None, interval: float = 15.0,
-    once: bool = False, include_ids: bool = False,
+    once: bool = False, include_ids: bool = False, in_place: bool = False,
 ) -> None:
     if interval <= 0:
         raise ValueError("interval must be greater than zero")
-    interactive = not once and sys.stdout.isatty()
     try:
         while True:
             accounts = get_positions()
@@ -42,9 +41,9 @@ def monitor(
             display = (unknown or render_positions(
                 accounts, ids, quotes, position_id=position_id, include_ids=include_ids
             ))
-            # Clear only after a successful snapshot. Avoid ANSI sequences in pipes,
-            # redirected output, or the deterministic --once mode.
-            if interactive:
+            # Explicit opt-in: never guess terminal capabilities from isatty().
+            # Keep --once useful for scripts and deterministic tests.
+            if in_place and not once:
                 sys.stdout.write("\x1b[H\x1b[2J")
             print(display, flush=True)
             if once:
