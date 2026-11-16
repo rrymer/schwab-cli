@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from schwab_cli import analytics
 from schwab_cli.analytics_service import calculate_market, resolve_metric
-from schwab_cli.cli import build_parser, dispatch
+from schwab_cli.cli import CommandError, build_parser, dispatch
 from schwab_cli import analytics_service
 from schwab_cli.store import PositionStore
 from tests.helpers import position
@@ -163,7 +163,7 @@ class ServiceTests(unittest.TestCase):
                 args = build_parser().parse_args(
                     ["analytics", "history", "SPY", "--metric", "rsi_14", *extra]
                 )
-                with self.assertRaises(ValueError):
+                with self.assertRaises(CommandError):
                     dispatch(args)
                 compute.assert_not_called()
 
