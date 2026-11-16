@@ -48,7 +48,6 @@ DASHBOARD_RSI_PERIOD: 7
             "POSITION_POLL_SECONDS: true\n",
             "POSITION_POLL_SECONDS: 0\n",
             "POSITION_POLL_SECONDS: .nan\n",
-            "POSITION_POLL_SECONDS: 20\nPOSITION_POLL_SECONDS: 40\n",
             "POSITION_POLL_SECONDS: [30]\n",
             "POSITION_POLL_SECONDS:\n  - 30\n",
             "KEYCHAIN_ACCOUNT: \"unterminated\n",
@@ -59,6 +58,20 @@ DASHBOARD_RSI_PERIOD: 7
             with self.subTest(body=body):
                 with self.assertRaises(ValueError):
                     conf.load_overrides(self.write(body))
+
+    def test_standard_yaml_features_and_non_mapping_inputs(self):
+        self.write("""# PyYAML handles quoted values and aliases
+KEYCHAIN_ACCOUNT: &account 'custom:keychain'
+KEYCHAIN_SERVICE_CLIENT_ID: *account
+POSITION_POLL_SECONDS: 3.5
+""")
+        overrides = conf.load_overrides(self.path)
+        self.assertEqual(overrides["KEYCHAIN_ACCOUNT"], "custom:keychain")
+        self.assertEqual(overrides["KEYCHAIN_SERVICE_CLIENT_ID"], "custom:keychain")
+        self.assertEqual(overrides["POSITION_POLL_SECONDS"], 3.5)
+        for invalid in ("- one\\n- two\\n", "42\\n", "KEYCHAIN_ACCOUNT: [a, b]\\n"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                conf.load_overrides(self.write(invalid))
 
     def test_auth_service_mapping_retains_existing_key_names(self):
         self.assertEqual(auth._KEYCHAIN_SERVICES["client_id"], conf.KEYCHAIN_SERVICE_CLIENT_ID)
