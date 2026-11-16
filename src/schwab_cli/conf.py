@@ -5,11 +5,11 @@ Credentials remain in macOS Keychain, not in YAML.
 """
 
 from pathlib import Path
-import json
 import math
 import os
-import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import yaml
 
 # Monitoring and requests (seconds).
 POSITION_POLL_SECONDS = 15.0
@@ -67,7 +67,7 @@ KEYCHAIN_SERVICE_ACCESS_TOKEN = "access_token"
 KEYCHAIN_SERVICE_REFRESH_TOKEN = "refresh_token"
 KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT = "access_expires_at"
 
-# A flat YAML mapping is intentionally supported without a third-party parser.
+# Configuration is read through PyYAML safe_load; only scalar settings are accepted.
 # Configuration is loaded once at process import; restart a long-running
 # monitor after modifying ~/.schwab/config.yaml.
 CONFIG_PATH = Path.home() / ".schwab" / "config.yaml"
@@ -76,56 +76,6 @@ _DEFAULTS = {
     if name.isupper() and not name.startswith("_")
     and isinstance(value, (str, int, float)) and not isinstance(value, bool)
 }
-
-
-def _uncomment(value: str) -> str:
-    """Strip inline # comments outside quoted strings."""
-    quote = None
-    escaped = False
-    for i, char in enumerate(value):
-        if quote == '"' and char == '\\' and not escaped:
-            escaped = True
-            continue
-        if char in ("'", '"') and not escaped:
-            if quote is None:
-                quote = char
-            elif quote == char:
-                # Double single quotes are valid YAML escaping, handled later.
-                if quote == "'" and i + 1 < len(value) and value[i + 1] == "'":
-                    continue
-                quote = None
-        if char == '#' and quote is None and (i == 0 or value[i - 1].isspace()):
-            return value[:i].strip()
-        escaped = False
-    if quote is not None:
-        raise ValueError("Unterminated YAML quote")
-    return value.strip()
-
-
-def _scalar(value: str):
-    if not value:
-        raise ValueError("Missing YAML scalar value")
-    if value.startswith('"'):
-        try:
-            parsed = json.loads(value)
-        except (ValueError, TypeError) as exc:
-            raise ValueError("Invalid double-quoted YAML string") from exc
-        if not isinstance(parsed, str):
-            raise ValueError("Expected string")
-        return parsed
-    if value.startswith("'"):
-        if len(value) < 2 or not value.endswith("'"):
-            raise ValueError("Unterminated single-quoted YAML string")
-        return value[1:-1].replace("''", "'")
-    if value.lower() in ("true", "false", "null", "~", "yes", "no", "on", "off"):
-        raise ValueError("Boolean and null values are not supported for settings")
-    if re.fullmatch(r"[+-]?\d+", value):
-        return int(value)
-    if re.fullmatch(r"[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?", value):
-        return float(value)
-    if value[0] in ("[", "{", "-", "|", ">"):
-        raise ValueError("Use a flat key: scalar YAML mapping")
-    return value
 
 
 def _validate(name: str, value):
@@ -168,36 +118,36 @@ def _validate(name: str, value):
 
 
 def load_overrides(path: Path | str | None = None) -> dict[str, object]:
-    """Parse a flat YAML mapping at ~/.schwab/config.yaml; never read secrets.
+    """Read optional YAML with PyYAML, validate a flat mapping of settings.
 
-    Missing file means all defaults. Unknown keys, malformed input and invalid
-    types are errors. Nested YAML and sequences are intentionally unsupported.
+    Missing file preserves defaults. Only known scalar settings are permitted;
+    secrets themselves must remain in macOS Keychain.
     """
     config_path = Path(path) if path is not None else CONFIG_PATH
     try:
-        contents = config_path.read_text(encoding="utf-8")
+        with config_path.open("r", encoding="utf-8") as stream:
+            data = yaml.safe_load(stream)
     except FileNotFoundError:
         return {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML configuration {config_path}: {exc}") from exc
     except OSError as exc:
         raise ValueError(f"Cannot read configuration {config_path}: {exc}") from exc
+
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{config_path}: expected a mapping of setting names to scalar values")
+
     overrides: dict[str, object] = {}
-    for line_number, line in enumerate(contents.splitlines(), 1):
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if line[0].isspace():
-            raise ValueError(f"{config_path}:{line_number}: nested YAML is not supported")
-        name, separator, raw = line.partition(":")
-        if not separator:
-            raise ValueError(f"{config_path}:{line_number}: expected KEY: value")
-        name = name.strip()
-        if name not in _DEFAULTS:
-            raise ValueError(f"{config_path}:{line_number}: unknown setting {name!r}")
-        if name in overrides:
-            raise ValueError(f"{config_path}:{line_number}: duplicate setting {name}")
+    for name, value in data.items():
+        if not isinstance(name, str) or name not in _DEFAULTS:
+            raise ValueError(f"{config_path}: unknown setting {name!r}")
         try:
-            overrides[name] = _validate(name, _scalar(_uncomment(raw)))
+            overrides[name] = _validate(name, value)
         except ValueError as exc:
-            raise ValueError(f"{config_path}:{line_number}: {exc}") from exc
+            raise ValueError(f"{config_path}: {exc}") from exc
+
     combined = {**_DEFAULTS, **overrides}
     if combined["REGULAR_SESSION_START_MINUTE"] >= combined["REGULAR_SESSION_END_MINUTE"]:
         raise ValueError("Regular session start must be before end")
