@@ -10,13 +10,14 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from . import conf
 from .analytics import rsi, to_frame
 from .api import SchwabAPIError
 from .market_data import _symbol, get_price_history
 from .quotes import get_quotes, option_underlying
 from .store import PositionStore
 
-_EASTERN = ZoneInfo("America/New_York")
+_EASTERN = ZoneInfo(conf.MARKET_TIMEZONE)
 
 
 def _regular_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -28,7 +29,7 @@ def _regular_candles(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         local = datetime.fromtimestamp(timestamp / 1000, tz=_EASTERN)
         minute = local.hour * 60 + local.minute
-        if local.weekday() < 5 and 570 <= minute < 960:
+        if local.weekday() < 5 and conf.REGULAR_SESSION_START_MINUTE <= minute < conf.REGULAR_SESSION_END_MINUTE:
             result.append(candle)
     return result
 
@@ -43,8 +44,8 @@ def latest_technicals(
     """
     loader = history_loader or get_price_history
     intraday = loader(
-        symbol, period_type="day", period=5,
-        frequency_type="minute", frequency=5, extended_hours=False,
+        symbol, period_type="day", period=conf.DASHBOARD_INTRADAY_DAYS,
+        frequency_type="minute", frequency=conf.DASHBOARD_BAR_MINUTES, extended_hours=False,
     ).get("candles") or []
     candles = _regular_candles(intraday)
     if not candles:
@@ -59,12 +60,12 @@ def latest_technicals(
                       all(type(v) in (int, float) and math.isfinite(v) and v >= 0 for v in volume)
                       else None)
     try:
-        current_rsi = rsi(to_frame(candles), period=14)
+        current_rsi = rsi(to_frame(candles), period=conf.DASHBOARD_RSI_PERIOD)
     except (ValueError, TypeError):
         current_rsi = None
 
     daily = loader(
-        symbol, period_type="month", period=1,
+        symbol, period_type=conf.DASHBOARD_DAILY_PERIOD_TYPE, period=conf.DASHBOARD_DAILY_PERIOD,
         frequency_type="daily", frequency=1, extended_hours=False,
     ).get("candles") or []
     previous = []
@@ -77,8 +78,8 @@ def latest_technicals(
             previous.append((date, float(size)))
     # One observation per date, with an explicit minimum sample size.
     previous_by_date = dict(previous)
-    sample = [previous_by_date[day] for day in sorted(previous_by_date)[-10:]]
-    adv = sum(sample) / 10 if len(sample) == 10 else None
+    sample = [previous_by_date[day] for day in sorted(previous_by_date)[-conf.DASHBOARD_ADV_SESSIONS:]]
+    adv = sum(sample) / conf.DASHBOARD_ADV_SESSIONS if len(sample) == conf.DASHBOARD_ADV_SESSIONS else None
     return {"rsi_5m": current_rsi, "session_volume": current_volume, "adv_10d": adv}
 
 
