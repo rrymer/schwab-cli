@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 import time
 
+from . import conf
 from .api import get_positions
 from .dashboard_technicals import technicals_for_positions
 from .positions import render_positions
@@ -12,7 +13,7 @@ from .store import PositionStore
 
 
 def monitor(
-    *, position_id: str | None = None, interval: float = 15.0,
+    *, position_id: str | None = None, interval: float = conf.POSITION_POLL_SECONDS,
     once: bool = False, include_ids: bool = False, in_place: bool = False,
     show_technicals: bool = False,
 ) -> None:
