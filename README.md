@@ -89,8 +89,10 @@ uv run schwab positions monitor --interval 10
 uv run schwab positions monitor <position-uuid> --include-ids --once
 ```
 
-Position rows display **Price** and **Underlying** alongside quantity, market
-value, and daily P/L. Equity/ETF price uses Schwab's latest quoted trade,
+Position rows display **Avg trade** (Schwab's position-level `averagePrice`),
+**Price**, and **Underlying** alongside quantity, market value, and daily P/L.
+Average trade price is taken from Schwab's aggregate position snapshot rather
+than reconstructed from individual lots; missing values display `-`. Equity/ETF price uses Schwab's latest quoted trade,
 falling back to mark if unavailable. Option price prefers the option **mark**
 (falling back to last trade). For options, the Underlying column uses Schwab's
 quoted underlying reference and latest underlying quote, falling back to the
