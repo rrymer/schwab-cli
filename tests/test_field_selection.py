@@ -75,7 +75,7 @@ class FieldSelectionTests(unittest.TestCase):
     def test_history_fields_respect_last_n_limit(self):
         candles = [{"datetime": 100, "close": 1}, {"datetime": 200, "close": 2},
                    {"datetime": 300, "close": 3}]
-        args = build_parser().parse_args(["market", "history", "SPY", "--fields", "datetime,close", "--limit", "2"])
+        args = build_parser().parse_args(["analytics", "history", "SPY", "--fields", "datetime,close", "--limit", "2"])
         out = io.StringIO()
         with patch.object(market_data, "get_price_history", return_value={"symbol": "SPY", "candles": candles}), redirect_stdout(out):
             dispatch(args)
