@@ -251,13 +251,14 @@ Only include settings you want to override. The file is optional: if absent,
 `conf.py` defaults are used. It is loaded when the process starts; restart
 `positions monitor` after editing it. CLI flags such as `--interval`
 still override the configured default. Unknown settings, invalid types,
-duplicate keys and malformed YAML cause a clear configuration error rather
+malformed YAML and unsupported values cause a clear configuration error rather
 than silently falling back to unsafe defaults.
 
-For now, the configuration parser deliberately supports **flat scalar YAML
-only**, including quoted strings and inline comments. It does not support
-nested mappings, sequences, anchors or advanced YAML syntax. This avoids
-requiring another package dependency for simple settings.
+Configuration uses **PyYAML `safe_load`**. Normal YAML string syntax,
+comments, and aliases work, but the application accepts only a top-level
+mapping of supported settings with scalar values. Nested mappings and lists
+are rejected by validation. Duplicate mapping keys follow PyYAML's normal
+last-value-wins behavior.
 
 **Do not store Schwab passwords, OAuth tokens, client IDs or client secrets
 in this file.** `KEYCHAIN_ACCOUNT` and `KEYCHAIN_SERVICE_*` are names
