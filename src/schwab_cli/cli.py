@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     positions_commands = positions.add_subparsers(dest="positions_command", required=True)
     positions_list_parser = positions_commands.add_parser("list", help="List positions")
     positions_list_parser.add_argument("--json", action="store_true")
+    positions_list_parser.add_argument("--include-ids", action="store_true", help="Show locally assigned position UUIDs")
 
     positions_add = positions_commands.add_parser(
         "add",
@@ -77,6 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=15.0,
         help="Polling interval in seconds (default: 15)",
     )
+
+    positions_monitor.add_argument("--include-ids", action="store_true", help="Show position UUIDs")
+    positions_monitor.add_argument("--in-place", action="store_true", help="Clear and redraw the same terminal area on each refresh")
 
     positions_monitor.add_argument(
         "--once",
@@ -149,7 +153,7 @@ def dispatch(args: argparse.Namespace) -> int:
         if args.positions_command == "list":
             from .positions import list_positions
 
-            list_positions(as_json=args.json)
+            list_positions(as_json=args.json, include_ids=args.include_ids)
             return 0
 
         if args.positions_command == "add":
@@ -175,6 +179,8 @@ def dispatch(args: argparse.Namespace) -> int:
                 position_id=args.position_id,
                 interval=args.interval,
                 once=args.once,
+                include_ids=args.include_ids,
+                in_place=args.in_place,
             )
             return 0
 
