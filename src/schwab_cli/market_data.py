@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from . import conf
 from .api import SchwabAPIError
 from .auth import get_access_token
 
@@ -49,7 +50,7 @@ def _get(path: str, params: dict[str, Any]) -> dict[str, Any]:
         method="GET",
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=conf.HTTP_TIMEOUT_SECONDS) as response:
             result = json.load(response)
     except HTTPError as exc:
         # A Schwab response body may contain account or token information.
@@ -82,8 +83,8 @@ def _epoch_ms(value: int | date | datetime | None) -> int | None:
 
 
 def get_price_history(
-    symbol: str, *, period_type: str = "year", period: int = 1,
-    frequency_type: str = "daily", frequency: int = 1,
+    symbol: str, *, period_type: str = conf.HISTORY_PERIOD_TYPE, period: int = conf.HISTORY_PERIOD,
+    frequency_type: str = conf.HISTORY_FREQUENCY_TYPE, frequency: int = conf.HISTORY_FREQUENCY,
     start: int | date | datetime | None = None,
     end: int | date | datetime | None = None,
     extended_hours: bool = False, previous_close: bool = False,
