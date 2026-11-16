@@ -164,7 +164,7 @@ def _validate(name: str, value):
         raise ValueError("Invalid DEFAULT_ORDER_TYPE")
     if name == "DEFAULT_CONTRACT_TYPE" and value not in {"CALL", "PUT", "ALL"}:
         raise ValueError("Invalid DEFAULT_CONTRACT_TYPE")
-    return value
+    return float(value) if isinstance(default, float) else value
 
 
 def load_overrides(path: Path | str | None = None) -> dict[str, object]:
