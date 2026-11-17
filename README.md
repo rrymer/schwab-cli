@@ -153,10 +153,11 @@ terminal notification request. With both flags, each triggered alert goes to
 both destinations. Without either flag, the command fails immediately. The price metric uses a Schwab quote; for an option
 position it prefers the mark. A position alert requires an active local UUID,
 not an instrument symbol. The default polling interval is 15 seconds.
-The optional `--once` evaluates the alert once without sleeping.
+The optional `--once` evaluates a single sample without sleeping, even if
+no trigger occurs. Otherwise the CLI waits until the first trigger.
 
-An alert fires when a metric first meets or crosses its threshold and does not
-repeat while the condition stays true. It rearms after the value crosses back
+A CLI alert exits after its first qualifying observation and notification attempts.
+Direct Python calls to `alert()` continue by default and rearm after the value crosses back
 outside the condition. If no usable quote is available, no notification is
 sent and the previous alert state is preserved. Polling cannot guarantee
 detection of price touches between samples.
@@ -462,10 +463,11 @@ uv run schwab monitor alert --symbol SPY --below 550 --stdout --gmail-notify
 
 Email is an independent output alongside `--stdout` and `--notify`.
 The Gmail provider resolves configuration and credentials before polling.
-An email is submitted on the first qualifying observation, and again only
-after the condition clears and subsequently becomes true. Missing quotes
+A CLI alert submits an email on the first qualifying observation and exits.
+Direct Python calls can continue and rearm after the condition clears. Missing quotes
 do not reset the condition. SMTP submission failures are reported to stderr
-without stopping polling or retrying the same event. Email delivery is
+without retrying the same event. CLI alerts still exit after the trigger;
+continuous Python alerts keep polling. Email delivery is
 synchronous, so it may delay the next poll; this is an audit notification
 channel, not a real-time execution mechanism.
 
