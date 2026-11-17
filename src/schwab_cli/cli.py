@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_alert.add_argument("--stdout", action="store_true", help="Print triggered alerts to stdout")
     monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
     monitor_alert.add_argument("--gmail-notify", action="store_true", help="Email triggered alerts via Gmail")
-    monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
+    monitor_alert.add_argument("--once", action="store_true", help="Evaluate only one sample instead of waiting for a trigger")
 
     analytics = commands.add_parser("analytics", help="Price history and market indicators")
     analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
@@ -235,7 +235,7 @@ def dispatch(args: argparse.Namespace) -> int:
         alert(
             symbol=args.symbol, position_id=args.position_id,
             metric=args.metric, above=args.above, below=args.below,
-            interval=args.interval, once=args.once,
+            interval=args.interval, once=args.once, exit_on_trigger=True,
             stdout=args.stdout, notify=args.notify, gmail_notify=args.gmail_notify,
         )
         return 0
