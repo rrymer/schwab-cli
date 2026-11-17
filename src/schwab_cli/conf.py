@@ -67,6 +67,16 @@ KEYCHAIN_SERVICE_ACCESS_TOKEN = "access_token"
 KEYCHAIN_SERVICE_REFRESH_TOKEN = "refresh_token"
 KEYCHAIN_SERVICE_ACCESS_EXPIRES_AT = "access_expires_at"
 
+# Outbound email. Addresses and secret lookup names are not credentials.
+EMAIL_SUBJECT_PREFIX = "[SCHWAB-CLI]"
+EMAIL_TIMEOUT_SECONDS = 15
+GMAIL_SMTP_HOST = "smtp.gmail.com"
+GMAIL_SMTP_PORT = 465
+GMAIL_SENDER = ""
+EMAIL_RECIPIENT = ""
+GMAIL_PASSWORD_ENV = "SCHWAB_GMAIL_APP_PASSWORD"
+KEYCHAIN_SERVICE_GMAIL_APP_PASSWORD = "gmail_app_password"
+
 # Configuration is read through PyYAML safe_load; only scalar settings are accepted.
 # Configuration is loaded once at process import; restart a long-running
 # monitor after modifying ~/.schwab/config.yaml.
@@ -81,7 +91,7 @@ _DEFAULTS = {
 def _validate(name: str, value):
     default = _DEFAULTS[name]
     if isinstance(default, str):
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or (not value.strip() and name not in {"GMAIL_SENDER", "EMAIL_RECIPIENT"}):
             raise ValueError(f"{name} must be a nonempty string")
         if name.startswith("KEYCHAIN_") and any(c in value for c in "\r\n\x00"):
             raise ValueError(f"{name} contains invalid characters")
