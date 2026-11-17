@@ -103,12 +103,13 @@ def alert(
     metric: str = conf.DEFAULT_ALERT_METRIC, above: float | None = None,
     below: float | None = None, interval: float = conf.ALERT_POLL_SECONDS,
     once: bool = False, stdout: bool = False, notify: bool = False,
+    exit_on_trigger: bool = False,
     gmail_notify: bool = False,
     email_provider: Provider | None = None,
     metric_evaluators: dict[str, MetricEvaluator] | None = None,
     notifier: Callable[[str], None] | None = None,
 ) -> None:
-    """Poll a registered metric and notify when its threshold is first met."""
+    """Poll a metric; optionally return after the first trigger."""
     if not (stdout or notify or gmail_notify or email_provider is not None):
         raise ValueError("Select at least one alert output: --stdout, --notify or --gmail-notify")
     target = AlertTarget(symbol=symbol, position_id=position_id)
@@ -144,6 +145,8 @@ def alert(
                         # Delivery is not part of the threshold state machine.
                         # Do not retry an ambiguous SMTP submission or rearm here.
                         print("schwab: alert email failed or submission outcome unknown", file=sys.stderr, flush=True)
+                if exit_on_trigger:
+                    return
             if once:
                 return
             time.sleep(interval)
