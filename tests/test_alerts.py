@@ -171,8 +171,34 @@ class AlertTests(unittest.TestCase):
         with patch.object(alerts, "alert") as run:
             self.assertEqual(dispatch(args), 0)
         self.assertTrue(run.call_args.kwargs["gmail_notify"])
+        self.assertTrue(run.call_args.kwargs["exit_on_trigger"])
         self.assertFalse(run.call_args.kwargs["stdout"])
         self.assertFalse(run.call_args.kwargs["notify"])
+
+    def test_cli_waits_for_trigger_then_exits_after_all_outputs(self):
+        args = build_parser().parse_args([
+            "monitor", "alert", "--symbol", "SPY", "--above", "500",
+            "--stdout", "--notify", "--gmail-notify",
+        ])
+        for failure in (False, True):
+            with self.subTest(failure=failure):
+                provider = Mock(spec=Provider)
+                if failure:
+                    provider.send.side_effect = EmailDeliveryError("failure")
+                evaluator = Mock(side_effect=[499, None, 501, AssertionError("extra poll")])
+                with (patch.dict(alerts.METRICS, {"price": evaluator}),
+                      patch.object(alerts, "gmail_provider", return_value=provider),
+                      patch.object(alerts, "notify_terminal") as notify,
+                      patch.object(alerts.time, "sleep") as sleep,
+                      patch("sys.stdout", io.StringIO()) as output,
+                      patch("sys.stderr", io.StringIO()) as errors):
+                    self.assertEqual(dispatch(args), 0)
+                self.assertEqual(evaluator.call_count, 3)
+                self.assertEqual(sleep.call_count, 2)
+                provider.send.assert_called_once()
+                notify.assert_called_once()
+                self.assertIn("Schwab alert:", output.getvalue())
+                self.assertEqual("alert email failed" in errors.getvalue(), failure)
 
     def test_gmail_setup_failure_precedes_polling(self):
         evaluator = Mock()
