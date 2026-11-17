@@ -6,6 +6,8 @@ from contextlib import redirect_stdout
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 from schwab_cli import orders
+from schwab_cli.cli import build_parser, dispatch
+from schwab_cli.integrations import EmailDeliveryError
 from tests.helpers import response
 
 
@@ -89,3 +91,59 @@ class OrderTests(unittest.TestCase):
         submit.assert_called_once()
         store.record_order_location.assert_called_once_with('LOCAL-UUID', '/orders/1')
         self.assertIn('LOCAL-UUID', out.getvalue())
+
+
+    def test_notification_dry_run_does_not_resolve_credentials(self):
+        with (patch.object(orders, "gmail_provider") as provider,
+              patch.object(orders, "submit_order") as submit,
+              patch.object(orders, "monitor_order") as monitor,
+              redirect_stdout(io.StringIO())):
+            orders.add_position(symbol="AAPL", asset_type="EQUITY", instruction="BUY",
+                                quantity=1, price=100, gmail_notify=True)
+        provider.assert_not_called()
+        submit.assert_not_called()
+        monitor.assert_not_called()
+
+    def test_cli_submission_monitors_returned_order_id(self):
+        args = build_parser().parse_args([
+            "positions", "add", "AAPL", "BUY", "1", "--price", "100",
+            "--submit", "--gmail-notify",
+        ])
+        store = MagicMock()
+        store.__enter__.return_value = store
+        store.reserve_order.return_value = "LOCAL-UUID"
+        with (patch.object(orders, "PositionStore", return_value=store),
+              patch.object(orders, "gmail_provider") as provider,
+              patch.object(orders, "submit_order", return_value="https://api.schwabapi.com/trader/v1/accounts/HASH/orders/123") as submit,
+              patch.object(orders, "monitor_order") as monitor,
+              redirect_stdout(io.StringIO())):
+            def check_recorded(*args, **kwargs):
+                store.record_order_location.assert_called_once()
+            monitor.side_effect = check_recorded
+            self.assertEqual(dispatch(args), 0)
+        submit.assert_called_once()
+        monitor.assert_called_once_with(123, email_provider=provider.return_value)
+
+    def test_bad_credentials_fail_before_submission(self):
+        with (patch.object(orders, "gmail_provider", side_effect=EmailDeliveryError("missing")),
+              patch.object(orders, "submit_order") as submit,
+              patch.object(orders, "PositionStore") as store,
+              redirect_stdout(io.StringIO())):
+            with self.assertRaises(EmailDeliveryError):
+                orders.add_position(symbol="AAPL", asset_type="EQUITY", instruction="BUY",
+                                    quantity=1, price=100, submit=True, gmail_notify=True)
+        submit.assert_not_called()
+        store.assert_not_called()
+
+    def test_missing_location_does_not_resubmit(self):
+        provider = MagicMock()
+        with (patch.object(orders, "PositionStore"),
+              patch.object(orders, "submit_order", return_value=None) as submit,
+              patch.object(orders, "monitor_order") as monitor,
+              patch("sys.stderr", io.StringIO()) as errors,
+              redirect_stdout(io.StringIO())):
+            orders.add_position(symbol="AAPL", asset_type="EQUITY", instruction="BUY",
+                                quantity=1, price=100, submit=True, email_provider=provider)
+        submit.assert_called_once()
+        monitor.assert_not_called()
+        self.assertIn("order accepted", errors.getvalue())

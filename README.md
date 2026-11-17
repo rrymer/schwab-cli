@@ -153,10 +153,11 @@ terminal notification request. With both flags, each triggered alert goes to
 both destinations. Without either flag, the command fails immediately. The price metric uses a Schwab quote; for an option
 position it prefers the mark. A position alert requires an active local UUID,
 not an instrument symbol. The default polling interval is 15 seconds.
-The optional `--once` evaluates the alert once without sleeping.
+The optional `--once` evaluates a single sample without sleeping, even if
+no trigger occurs. Otherwise the CLI waits until the first trigger.
 
-An alert fires when a metric first meets or crosses its threshold and does not
-repeat while the condition stays true. It rearms after the value crosses back
+A CLI alert exits after its first qualifying observation and notification attempts.
+Direct Python calls to `alert()` continue by default and rearm after the value crosses back
 outside the condition. If no usable quote is available, no notification is
 sent and the previous alert state is preserved. Polling cannot guarantee
 detection of price touches between samples.
@@ -413,3 +414,87 @@ Requests, query parameters, frequency constraints, and response fields were chec
 uv run python -m unittest -v tests.test_market_data
 uv run python -m unittest discover -s tests -t . -v
 ```
+
+
+## Outbound email (Gmail)
+
+The provider-neutral interface lives in `schwab_cli.integrations`.
+`Provider` is a lightweight abstract base class with one abstract method,
+`send(message)`. `Gmail(Provider)` is the first concrete implementation.
+It is wired into threshold alerts and optional order execution notifications, but not TradePlans.
+To explicitly test delivery:
+
+```python
+from schwab_cli.integrations import send_email
+
+send_email("Test alert", "Schwab CLI notification test.")
+```
+
+Add these settings to your existing `~/.schwab/config.yaml`:
+
+```yaml
+GMAIL_SENDER: "your-address@gmail.com"
+EMAIL_RECIPIENT: "your-address@gmail.com"
+```
+
+A blank recipient defaults to the sender. Subjects automatically receive the
+`[SCHWAB-CLI]` prefix unless already present. Gmail uses SMTP over verified
+TLS on port 465 and requires a Google app password where supported by the
+account. Never put passwords in YAML or source control.
+
+Inject the app password through `SCHWAB_GMAIL_APP_PASSWORD` using your
+local secret manager, or on macOS store it in Keychain (account
+`gmail_app_password`, service `schwabbot`, matching the existing project's
+lookup convention). Both lookup identifiers are configurable. Environment
+injection takes precedence. Email transport is cross-platform; existing
+Schwab authentication is still macOS-specific.
+
+Submission success means SMTP acceptance, not delivery or a ChatGPT
+notification. Failures raise `EmailDeliveryError` without automatic
+retries; callers own retry policy and audit logging. No new dependencies.
+
+
+### Email threshold alerts
+
+```bash
+uv run schwab monitor alert --symbol SPY --above 600 --gmail-notify
+uv run schwab monitor alert --symbol SPY --below 550 --stdout --gmail-notify
+```
+
+Email is an independent output alongside `--stdout` and `--notify`.
+The Gmail provider resolves configuration and credentials before polling.
+A CLI alert submits an email on the first qualifying observation and exits.
+Direct Python calls can continue and rearm after the condition clears. Missing quotes
+do not reset the condition. SMTP submission failures are reported to stderr
+without retrying the same event. CLI alerts still exit after the trigger;
+continuous Python alerts keep polling. Email delivery is
+synchronous, so it may delay the next poll; this is an audit notification
+channel, not a real-time execution mechanism.
+
+Python callers may pass an arbitrary concrete `Provider` via
+`alert(..., email_provider=provider)` independently of the Gmail CLI flag.
+
+
+### Order execution notifications
+
+```bash
+uv run schwab positions add AAPL BUY 1 --price 150 --submit --gmail-notify
+```
+
+Without `--submit`, this remains a dry run and sends no email. With
+`--submit --gmail-notify`, Gmail credentials are resolved before submission.
+After acceptance and recording the broker Location, the command polls
+the returned order ID until a terminal state. It sends email on observed
+increases in filled quantity, including partial fills, with actual execution
+prices, quantities and timestamps when available. Acknowledgment alone
+does not trigger email. Without the notification flag, submission returns
+as before. Python callers may inject a `Provider` using `email_provider`.
+
+The command waits synchronously until FILLED, CANCELED, REJECTED, EXPIRED
+or REPLACED; Ctrl+C stops local monitoring but does not cancel the order.
+No execution email is sent for terminal orders with zero fills. Multiple
+fills between polls are grouped. Deduplication is in memory. Replacement
+and child orders are not followed. Email failures are logged, not retried.
+If order retrieval fails or the Location is missing/invalid after acceptance,
+a warning is printed; the order may still execute. Never resubmit merely
+because monitoring or email failed.

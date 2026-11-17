@@ -1,4 +1,4 @@
-"""Polling-based terminal alerts with a metric registry and edge-triggered rules.
+"""Polling-based alerts with a metric registry and edge-triggered rules.
 
 Notifications are emitted as OSC 9 terminal sequences. The terminal emulator,
 not Python, decides whether to publish a macOS Notification Center notification.
@@ -14,6 +14,7 @@ from typing import Any
 
 from . import conf
 from .api import get_positions
+from .integrations import EmailDeliveryError, Provider, gmail_provider, send_email
 from .market_data import _symbol
 from .quotes import get_quotes, quote_price
 from .store import PositionStore
@@ -102,12 +103,15 @@ def alert(
     metric: str = conf.DEFAULT_ALERT_METRIC, above: float | None = None,
     below: float | None = None, interval: float = conf.ALERT_POLL_SECONDS,
     once: bool = False, stdout: bool = False, notify: bool = False,
+    exit_on_trigger: bool = False,
+    gmail_notify: bool = False,
+    email_provider: Provider | None = None,
     metric_evaluators: dict[str, MetricEvaluator] | None = None,
     notifier: Callable[[str], None] | None = None,
 ) -> None:
-    """Poll a registered metric and notify when its threshold is first met."""
-    if not (stdout or notify):
-        raise ValueError("Select at least one alert output: --stdout and/or --notify")
+    """Poll a metric; optionally return after the first trigger."""
+    if not (stdout or notify or gmail_notify or email_provider is not None):
+        raise ValueError("Select at least one alert output: --stdout, --notify or --gmail-notify")
     target = AlertTarget(symbol=symbol, position_id=position_id)
     if interval <= 0 or not math.isfinite(interval):
         raise ValueError("Alert interval must be positive and finite")
@@ -119,6 +123,9 @@ def alert(
     if metric not in evaluators:
         raise ValueError(f"Unknown alert metric: {metric}")
     evaluator = evaluators[metric]
+    # Resolve settings and credentials once, before starting the polling loop.
+    if gmail_notify and email_provider is None:
+        email_provider = gmail_provider()
     publish = notify_terminal if notifier is None else notifier
     label = target.symbol or f"position {target.position_id}"
     try:
@@ -131,6 +138,15 @@ def alert(
                     print(message, flush=True)
                 if notify:
                     publish(message)
+                if email_provider is not None:
+                    try:
+                        send_email(message, message, provider=email_provider)
+                    except EmailDeliveryError:
+                        # Delivery is not part of the threshold state machine.
+                        # Do not retry an ambiguous SMTP submission or rearm here.
+                        print("schwab: alert email failed or submission outcome unknown", file=sys.stderr, flush=True)
+                if exit_on_trigger:
+                    return
             if once:
                 return
             time.sleep(interval)

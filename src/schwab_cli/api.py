@@ -74,3 +74,15 @@ def get_positions() -> list[dict[str, Any]]:
         raise SchwabAPIError("Unexpected account positions response")
 
     return [payload]
+
+
+def get_order(order_id: int) -> dict[str, Any]:
+    """Retrieve a single broker order for the unique configured account."""
+    if type(order_id) is not int or not 0 < order_id < 2**63:
+        raise ValueError("Order ID must be a positive Schwab int64 order ID")
+    account_hash = account_numbers()
+    payload = _get(f"/accounts/{quote(account_hash, safe='')}/orders/{order_id}")
+    if (not isinstance(payload, dict) or payload.get("orderId") != order_id
+            or not isinstance(payload.get("status"), str)):
+        raise SchwabAPIError("Unexpected Schwab order response")
+    return payload

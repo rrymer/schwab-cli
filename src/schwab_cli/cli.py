@@ -67,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Transmit a live order to Schwab",
     )
+    positions_add.add_argument("--gmail-notify", action="store_true", help="Wait for execution and email confirmed fills (with --submit)")
     positions_monitor = positions_commands.add_parser(
         "monitor",
         help="Monitor Schwab positions",
@@ -110,7 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_alert.add_argument("--interval", type=float, default=conf.ALERT_POLL_SECONDS, help="Poll interval in seconds")
     monitor_alert.add_argument("--stdout", action="store_true", help="Print triggered alerts to stdout")
     monitor_alert.add_argument("--notify", action="store_true", help="Request a terminal system notification")
-    monitor_alert.add_argument("--once", action="store_true", help="Evaluate the condition only once")
+    monitor_alert.add_argument("--gmail-notify", action="store_true", help="Email triggered alerts via Gmail")
+    monitor_alert.add_argument("--once", action="store_true", help="Evaluate only one sample instead of waiting for a trigger")
 
     analytics = commands.add_parser("analytics", help="Price history and market indicators")
     analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
@@ -211,7 +213,7 @@ def dispatch(args: argparse.Namespace) -> int:
                 price=args.price,
                 session=args.session,
                 duration=args.duration,
-                submit=args.submit,
+                submit=args.submit, gmail_notify=args.gmail_notify,
             )
             return 0
 
@@ -234,8 +236,8 @@ def dispatch(args: argparse.Namespace) -> int:
         alert(
             symbol=args.symbol, position_id=args.position_id,
             metric=args.metric, above=args.above, below=args.below,
-            interval=args.interval, once=args.once,
-            stdout=args.stdout, notify=args.notify,
+            interval=args.interval, once=args.once, exit_on_trigger=True,
+            stdout=args.stdout, notify=args.notify, gmail_notify=args.gmail_notify,
         )
         return 0
 
@@ -356,11 +358,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     from .api import SchwabAPIError
     from .auth import AuthError
+    from .integrations import EmailDeliveryError
     try:
         if args.command != "init":
             conf.ensure_config_file()
         return dispatch(args)
-    except (CommandError, ValueError, OSError, SchwabAPIError, AuthError) as exc:
+    except (CommandError, ValueError, OSError, SchwabAPIError, AuthError, EmailDeliveryError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
         return 1
 

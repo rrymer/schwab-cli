@@ -9,14 +9,17 @@ from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 import json
+import sys
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from . import conf
 from .api import BASE_URL, SchwabAPIError, account_numbers
 from .auth import get_access_token
 from .store import PositionStore
+from .integrations import Provider, gmail_provider
+from .order_monitor import monitor_order
 
 
 def remove_none(obj: Any) -> Any:
@@ -217,7 +220,8 @@ def submit_order(order: SchwabOrder) -> str | None:
 def add_position(*, symbol: str, asset_type: str, instruction: str,
                  quantity: float, order_type: str = conf.DEFAULT_ORDER_TYPE, price: float | None = None,
                  session: str = conf.DEFAULT_SESSION, duration: str = conf.DEFAULT_DURATION,
-                 submit: bool = False) -> None:
+                 submit: bool = False, gmail_notify: bool = False,
+                 email_provider: Provider | None = None) -> None:
     order = build_single_order(
         symbol=symbol, asset_type=asset_type, instruction=instruction,
         quantity=quantity, order_type=order_type, price=price,
@@ -227,6 +231,8 @@ def add_position(*, symbol: str, asset_type: str, instruction: str,
     if not submit:
         print("DRY RUN: no order submitted. Add --submit to transmit a LIVE order.")
         return
+    if gmail_notify and email_provider is None:
+        email_provider = gmail_provider()
     instrument_key = PositionStore.key({'symbol': symbol, 'assetType': asset_type})
     with PositionStore() as store:
         existing_id = store.active_id(instrument_key)
@@ -245,3 +251,19 @@ def add_position(*, symbol: str, asset_type: str, instruction: str,
     print("Schwab accepted the order request; execution is NOT confirmed.")
     if location:
         print(f"Order location: {location}")
+
+    if email_provider is not None:
+        # Never follow the Location URL directly or use it to select an account.
+        # Poll the numeric ID via our existing authenticated read-only endpoint.
+        try:
+            parts = urlsplit(location or "").path.rstrip("/").split("/")
+            if len(parts) < 2 or parts[-2] != "orders" or not parts[-1].isascii() or not parts[-1].isdigit():
+                raise ValueError("Missing broker order ID")
+            order_id = int(parts[-1])
+            if not 0 < order_id < 2**63:
+                raise ValueError("Invalid broker order ID")
+            monitor_order(order_id, email_provider=email_provider)
+        except (ValueError, SchwabAPIError, OSError) as exc:
+            print("schwab: order accepted, but execution monitoring failed; "
+                  "check Schwab order history before retrying. "
+                  f"({type(exc).__name__})", file=sys.stderr, flush=True)
