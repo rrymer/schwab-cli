@@ -421,7 +421,7 @@ uv run python -m unittest discover -s tests -t . -v
 The provider-neutral interface lives in `schwab_cli.integrations`.
 `Provider` is a lightweight abstract base class with one abstract method,
 `send(message)`. `Gmail(Provider)` is the first concrete implementation.
-It is wired into threshold alerts, but not into orders or TradePlans.
+It is wired into threshold alerts and optional order execution notifications, but not TradePlans.
 To explicitly test delivery:
 
 ```python
@@ -478,20 +478,23 @@ Python callers may pass an arbitrary concrete `Provider` via
 ### Order execution notifications
 
 ```bash
-uv run schwab monitor order --order-id 123456789 --gmail-notify --stdout
+uv run schwab positions add AAPL BUY 1 --price 150 --submit --gmail-notify
 ```
 
-Use the broker order ID (the numeric ID at the end of the Location URL
-reported on submission), not the local position or tracking UUID. This
-read-only command polls the documented individual order endpoint. It does
-not submit, cancel or replace orders. It reports increases in cumulative
-filled quantity, including initial existing fills, with broker execution
-leg prices, quantities, timestamps and order status where available.
-Partial fills continue monitoring; FILLED, CANCELED, REJECTED, EXPIRED
-and REPLACED end monitoring. A terminal order with no fills does not
-send an execution email. Multiple fills between polls are grouped.
-The monitor tracks observed cumulative quantity in memory only; restarting
-can report existing fills again. Replacements and child orders are not
-followed automatically. SMTP failures are logged and not retried.
-Use `--once` to inspect one snapshot, or Ctrl+C to stop monitoring.
-The flag does not change order submission or automatically start a monitor.
+Without `--submit`, this remains a dry run and sends no email. With
+`--submit --gmail-notify`, Gmail credentials are resolved before submission.
+After acceptance and recording the broker Location, the command polls
+the returned order ID until a terminal state. It sends email on observed
+increases in filled quantity, including partial fills, with actual execution
+prices, quantities and timestamps when available. Acknowledgment alone
+does not trigger email. Without the notification flag, submission returns
+as before. Python callers may inject a `Provider` using `email_provider`.
+
+The command waits synchronously until FILLED, CANCELED, REJECTED, EXPIRED
+or REPLACED; Ctrl+C stops local monitoring but does not cancel the order.
+No execution email is sent for terminal orders with zero fills. Multiple
+fills between polls are grouped. Deduplication is in memory. Replacement
+and child orders are not followed. Email failures are logged, not retried.
+If order retrieval fails or the Location is missing/invalid after acceptance,
+a warning is printed; the order may still execute. Never resubmit merely
+because monitoring or email failed.
