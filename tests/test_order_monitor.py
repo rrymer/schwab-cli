@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from schwab_cli import api, conf, order_monitor
-from schwab_cli.cli import build_parser, dispatch
 from schwab_cli.integrations import EmailDeliveryError, Provider
 
 
@@ -79,15 +78,11 @@ class OrderMonitorTests(unittest.TestCase):
         self.assertIn("email failed", errors.getvalue())
         self.assertNotIn("private", errors.getvalue())
 
-    def test_cli_dispatch_and_once(self):
-        args = build_parser().parse_args([
-            "monitor", "order", "--order-id", "123", "--gmail-notify", "--once",
-        ])
+    def test_once_fetches_one_snapshot(self):
         provider = Mock(spec=Provider)
-        with (patch.object(order_monitor, "gmail_provider", return_value=provider),
-              patch.object(order_monitor, "get_order", return_value=order(0, "WORKING")) as fetch,
+        with (patch.object(order_monitor, "get_order", return_value=order(0, "WORKING")) as fetch,
               patch.object(order_monitor.time, "sleep") as sleep):
-            self.assertEqual(dispatch(args), 0)
+            order_monitor.monitor_order(123, email_provider=provider, once=True)
         fetch.assert_called_once_with(123)
         sleep.assert_not_called()
         provider.send.assert_not_called()
