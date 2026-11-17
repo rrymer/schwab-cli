@@ -1,6 +1,7 @@
 """Outbound email transport; no trading or notification policy lives here."""
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.headerregistry import Address
@@ -9,7 +10,6 @@ import os
 import smtplib
 import ssl
 import sys
-from typing import Protocol
 
 from . import conf
 
@@ -24,10 +24,12 @@ class Message:
     body: str
 
 
-class EmailProvider(Protocol):
+class Provider(ABC):
     """Implementations submit one plain-text message or raise EmailDeliveryError."""
 
-    def send(self, message: Message) -> None: ...
+    @abstractmethod
+    def send(self, message: Message) -> None:
+        """Submit a message through the concrete transport."""
 
 
 def _address(value: str) -> str:
@@ -41,7 +43,7 @@ def _address(value: str) -> str:
 
 
 @dataclass(frozen=True)
-class GmailProvider:
+class Gmail(Provider):
     """Gmail SMTP over verified TLS, authenticated by an app password."""
 
     sender: str
@@ -77,7 +79,7 @@ class GmailProvider:
             ) from None
 
 
-def gmail_provider() -> GmailProvider:
+def gmail_provider() -> Gmail:
     """Resolve credentials without reading passwords from YAML.
 
     Environment injection works cross-platform; macOS falls back to the
@@ -94,10 +96,10 @@ def gmail_provider() -> GmailProvider:
         raise EmailDeliveryError(
             f"Set {conf.GMAIL_PASSWORD_ENV} or configure the Gmail app password in macOS Keychain"
         )
-    return GmailProvider(sender, recipient, password)
+    return Gmail(sender, recipient, password)
 
 
-def send_email(subject: str, body: str, provider: EmailProvider | None = None) -> None:
+def send_email(subject: str, body: str, provider: Provider | None = None) -> None:
     """Submit a plain-text event email. The caller owns retry and audit policy."""
     if not isinstance(subject, str) or not subject.strip() or "\r" in subject or "\n" in subject:
         raise EmailDeliveryError("Email subject must be a nonempty single line")
