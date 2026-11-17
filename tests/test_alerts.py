@@ -1,9 +1,10 @@
 """Read-only alert engine tests: no Schwab tokens or OS notifications."""
 import io
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from schwab_cli import alerts
+from schwab_cli import alerts, conf
+from schwab_cli.integrations import EmailDeliveryError, Message, Provider
 from schwab_cli.cli import build_parser, dispatch
 from schwab_cli.store import PositionStore
 from tests.helpers import position, snapshot
@@ -133,6 +134,53 @@ class AlertTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["above"], 500.0)
         self.assertTrue(run.call_args.kwargs["stdout"])
         self.assertTrue(run.call_args.kwargs["notify"])
+
+    def test_gmail_only_alert_resolves_provider_and_prefixes_message(self):
+        provider = Mock(spec=Provider)
+        with patch.object(alerts, "gmail_provider", return_value=provider) as factory:
+            alerts.alert(symbol="SPY", above=500, once=True, gmail_notify=True,
+                         metric_evaluators={"price": lambda _: 501.5})
+        factory.assert_called_once_with()
+        body = "Schwab alert: SPY price 501.5 above 500"
+        provider.send.assert_called_once_with(Message(f"{conf.EMAIL_SUBJECT_PREFIX} {body}", body))
+
+    def test_email_does_not_fire_when_condition_unmet(self):
+        provider = Mock(spec=Provider)
+        alerts.alert(symbol="SPY", above=500, once=True, email_provider=provider,
+                     metric_evaluators={"price": lambda _: 499})
+        provider.send.assert_not_called()
+
+    def test_email_failure_does_not_abort_or_rearm_alert(self):
+        provider = Mock(spec=Provider)
+        provider.send.side_effect = [EmailDeliveryError("private detail"), None]
+        evaluator = Mock(side_effect=[501, 502, None, 499, 501, KeyboardInterrupt])
+        output, errors = io.StringIO(), io.StringIO()
+        with (patch.object(alerts.time, "sleep"),
+              patch("sys.stdout", output), patch("sys.stderr", errors)):
+            alerts.alert(symbol="SPY", above=500, stdout=True, email_provider=provider,
+                         metric_evaluators={"price": evaluator})
+        self.assertEqual(provider.send.call_count, 2)
+        self.assertEqual(output.getvalue().count("Schwab alert:"), 2)
+        self.assertIn("alert email failed", errors.getvalue())
+        self.assertNotIn("private detail", errors.getvalue())
+
+    def test_gmail_flag_dispatch(self):
+        args = build_parser().parse_args([
+            "monitor", "alert", "--symbol", "SPY", "--above", "500", "--gmail-notify",
+        ])
+        with patch.object(alerts, "alert") as run:
+            self.assertEqual(dispatch(args), 0)
+        self.assertTrue(run.call_args.kwargs["gmail_notify"])
+        self.assertFalse(run.call_args.kwargs["stdout"])
+        self.assertFalse(run.call_args.kwargs["notify"])
+
+    def test_gmail_setup_failure_precedes_polling(self):
+        evaluator = Mock()
+        with patch.object(alerts, "gmail_provider", side_effect=EmailDeliveryError("missing password")):
+            with self.assertRaises(EmailDeliveryError):
+                alerts.alert(symbol="SPY", above=500, gmail_notify=True,
+                             metric_evaluators={"price": evaluator})
+        evaluator.assert_not_called()
 
     def test_old_position_monitor_command_still_parses(self):
         args = build_parser().parse_args(["positions", "monitor", "some-uuid", "--once"])
