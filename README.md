@@ -417,7 +417,9 @@ uv run python -m unittest discover -s tests -t . -v
 
 ## Outbound email (Gmail)
 
-The provider-neutral interface lives in `schwab_cli.email_integration`.
+The provider-neutral interface lives in `schwab_cli.integrations`.
+`Provider` is a lightweight abstract base class with one abstract method,
+`send(message)`. `Gmail(Provider)` is the first concrete implementation.
 It is not wired into alerts, orders, or TradePlans yet. To explicitly test delivery:
 
 ```python
