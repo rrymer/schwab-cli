@@ -5,13 +5,24 @@ import smtplib
 
 from schwab_cli import conf
 from schwab_cli.integrations import (
-    EmailDeliveryError, GmailProvider, Message, gmail_provider, send_email,
+    EmailDeliveryError, Gmail, Message, Provider, gmail_provider, send_email,
 )
 
 
 class EmailTests(unittest.TestCase):
+    def test_provider_is_abstract_and_gmail_is_concrete(self):
+        with self.assertRaises(TypeError):
+            Provider()
+        self.assertIsInstance(Gmail("sender@gmail.com", "recipient@example.com", "secret"), Provider)
+
+        class IncompleteProvider(Provider):
+            pass
+
+        with self.assertRaises(TypeError):
+            IncompleteProvider()
+
     def test_prefix_and_provider_injection(self):
-        provider = Mock()
+        provider = Mock(spec=Provider)
         send_email("Test", "body", provider)
         provider.send.assert_called_once_with(Message(f"{conf.EMAIL_SUBJECT_PREFIX} Test", "body"))
         provider.reset_mock()
@@ -19,8 +30,8 @@ class EmailTests(unittest.TestCase):
         provider.send.assert_called_once_with(Message(f"{conf.EMAIL_SUBJECT_PREFIX} Test", "body"))
 
     def test_gmail_sends_over_tls(self):
-        provider = GmailProvider("sender@gmail.com", "recipient@example.com", "secret")
-        with patch("schwab_cli.integrations.py.smtplib.SMTP_SSL") as factory:
+        provider = Gmail("sender@gmail.com", "recipient@example.com", "secret")
+        with patch("schwab_cli.integrations.smtplib.SMTP_SSL") as factory:
             smtp = factory.return_value.__enter__.return_value
             smtp.send_message.return_value = {}
             provider.send(Message("Test", "Hello"))
@@ -35,8 +46,8 @@ class EmailTests(unittest.TestCase):
         self.assertNotIn("secret", repr(provider))
 
     def test_no_retry_on_ambiguous_failure(self):
-        provider = GmailProvider("sender@gmail.com", "recipient@example.com", "secret")
-        with patch("schwab_cli.integrations.py.smtplib.SMTP_SSL") as factory:
+        provider = Gmail("sender@gmail.com", "recipient@example.com", "secret")
+        with patch("schwab_cli.integrations.smtplib.SMTP_SSL") as factory:
             smtp = factory.return_value.__enter__.return_value
             smtp.send_message.side_effect = smtplib.SMTPServerDisconnected("secret response")
             with self.assertRaises(EmailDeliveryError) as error:
@@ -56,7 +67,7 @@ class EmailTests(unittest.TestCase):
         with (patch.object(conf, "GMAIL_SENDER", "sender@gmail.com"),
               patch.object(conf, "EMAIL_RECIPIENT", ""),
               patch.dict("os.environ", {}, clear=True),
-              patch("schwab_cli.integrations.py.sys.platform", "win32")):
+              patch("schwab_cli.integrations.sys.platform", "win32")):
             with self.assertRaises(EmailDeliveryError):
                 gmail_provider()
         with self.assertRaises(EmailDeliveryError):
@@ -66,7 +77,7 @@ class EmailTests(unittest.TestCase):
         with (patch.object(conf, "GMAIL_SENDER", "sender@gmail.com"),
               patch.object(conf, "EMAIL_RECIPIENT", ""),
               patch.dict("os.environ", {}, clear=True),
-              patch("schwab_cli.integrations.py.sys.platform", "darwin"),
+              patch("schwab_cli.integrations.sys.platform", "darwin"),
               patch("schwab_cli.auth._keychain", return_value="test-password") as lookup):
             provider = gmail_provider()
         lookup.assert_called_once_with(conf.KEYCHAIN_SERVICE_GMAIL_APP_PASSWORD)
