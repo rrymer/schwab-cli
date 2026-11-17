@@ -413,3 +413,38 @@ Requests, query parameters, frequency constraints, and response fields were chec
 uv run python -m unittest -v tests.test_market_data
 uv run python -m unittest discover -s tests -t . -v
 ```
+
+
+## Outbound email (Gmail)
+
+The provider-neutral interface lives in `schwab_cli.email_integration`.
+It is not wired into alerts, orders, or TradePlans yet. To explicitly test delivery:
+
+```python
+from schwab_cli.email_integration import send_email
+
+send_email("Test alert", "Schwab CLI notification test.")
+```
+
+Add these settings to your existing `~/.schwab/config.yaml`:
+
+```yaml
+GMAIL_SENDER: "your-address@gmail.com"
+EMAIL_RECIPIENT: "your-address@gmail.com"
+```
+
+A blank recipient defaults to the sender. Subjects automatically receive the
+`[SCHWAB-CLI]` prefix unless already present. Gmail uses SMTP over verified
+TLS on port 465 and requires a Google app password where supported by the
+account. Never put passwords in YAML or source control.
+
+Inject the app password through `SCHWAB_GMAIL_APP_PASSWORD` using your
+local secret manager, or on macOS store it in Keychain (account
+`gmail_app_password`, service `schwabbot`, matching the existing project's
+lookup convention). Both lookup identifiers are configurable. Environment
+injection takes precedence. Email transport is cross-platform; existing
+Schwab authentication is still macOS-specific.
+
+Submission success means SMTP acceptance, not delivery or a ChatGPT
+notification. Failures raise `EmailDeliveryError` without automatic
+retries; callers own retry policy and audit logging. No new dependencies.
