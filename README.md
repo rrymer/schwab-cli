@@ -420,7 +420,8 @@ uv run python -m unittest discover -s tests -t . -v
 The provider-neutral interface lives in `schwab_cli.integrations`.
 `Provider` is a lightweight abstract base class with one abstract method,
 `send(message)`. `Gmail(Provider)` is the first concrete implementation.
-It is not wired into alerts, orders, or TradePlans yet. To explicitly test delivery:
+It is wired into threshold alerts, but not into orders or TradePlans.
+To explicitly test delivery:
 
 ```python
 from schwab_cli.integrations import send_email
@@ -450,3 +451,23 @@ Schwab authentication is still macOS-specific.
 Submission success means SMTP acceptance, not delivery or a ChatGPT
 notification. Failures raise `EmailDeliveryError` without automatic
 retries; callers own retry policy and audit logging. No new dependencies.
+
+
+### Email threshold alerts
+
+```bash
+uv run schwab monitor alert --symbol SPY --above 600 --gmail-notify
+uv run schwab monitor alert --symbol SPY --below 550 --stdout --gmail-notify
+```
+
+Email is an independent output alongside `--stdout` and `--notify`.
+The Gmail provider resolves configuration and credentials before polling.
+An email is submitted on the first qualifying observation, and again only
+after the condition clears and subsequently becomes true. Missing quotes
+do not reset the condition. SMTP submission failures are reported to stderr
+without stopping polling or retrying the same event. Email delivery is
+synchronous, so it may delay the next poll; this is an audit notification
+channel, not a real-time execution mechanism.
+
+Python callers may pass an arbitrary concrete `Provider` via
+`alert(..., email_provider=provider)` independently of the Gmail CLI flag.
