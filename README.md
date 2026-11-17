@@ -421,7 +421,7 @@ The provider-neutral interface lives in `schwab_cli.email_integration`.
 It is not wired into alerts, orders, or TradePlans yet. To explicitly test delivery:
 
 ```python
-from schwab_cli.email_integration import send_email
+from schwab_cli.integrations import send_email
 
 send_email("Test alert", "Schwab CLI notification test.")
 ```

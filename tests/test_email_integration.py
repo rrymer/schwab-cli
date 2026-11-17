@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import smtplib
 
 from schwab_cli import conf
-from schwab_cli.email_integration import (
+from schwab_cli.integrations import (
     EmailDeliveryError, GmailProvider, Message, gmail_provider, send_email,
 )
 
@@ -20,7 +20,7 @@ class EmailTests(unittest.TestCase):
 
     def test_gmail_sends_over_tls(self):
         provider = GmailProvider("sender@gmail.com", "recipient@example.com", "secret")
-        with patch("schwab_cli.email_integration.smtplib.SMTP_SSL") as factory:
+        with patch("schwab_cli.integrations.py.smtplib.SMTP_SSL") as factory:
             smtp = factory.return_value.__enter__.return_value
             smtp.send_message.return_value = {}
             provider.send(Message("Test", "Hello"))
@@ -36,7 +36,7 @@ class EmailTests(unittest.TestCase):
 
     def test_no_retry_on_ambiguous_failure(self):
         provider = GmailProvider("sender@gmail.com", "recipient@example.com", "secret")
-        with patch("schwab_cli.email_integration.smtplib.SMTP_SSL") as factory:
+        with patch("schwab_cli.integrations.py.smtplib.SMTP_SSL") as factory:
             smtp = factory.return_value.__enter__.return_value
             smtp.send_message.side_effect = smtplib.SMTPServerDisconnected("secret response")
             with self.assertRaises(EmailDeliveryError) as error:
@@ -56,7 +56,7 @@ class EmailTests(unittest.TestCase):
         with (patch.object(conf, "GMAIL_SENDER", "sender@gmail.com"),
               patch.object(conf, "EMAIL_RECIPIENT", ""),
               patch.dict("os.environ", {}, clear=True),
-              patch("schwab_cli.email_integration.sys.platform", "win32")):
+              patch("schwab_cli.integrations.py.sys.platform", "win32")):
             with self.assertRaises(EmailDeliveryError):
                 gmail_provider()
         with self.assertRaises(EmailDeliveryError):
@@ -66,7 +66,7 @@ class EmailTests(unittest.TestCase):
         with (patch.object(conf, "GMAIL_SENDER", "sender@gmail.com"),
               patch.object(conf, "EMAIL_RECIPIENT", ""),
               patch.dict("os.environ", {}, clear=True),
-              patch("schwab_cli.email_integration.sys.platform", "darwin"),
+              patch("schwab_cli.integrations.py.sys.platform", "darwin"),
               patch("schwab_cli.auth._keychain", return_value="test-password") as lookup):
             provider = gmail_provider()
         lookup.assert_called_once_with(conf.KEYCHAIN_SERVICE_GMAIL_APP_PASSWORD)
