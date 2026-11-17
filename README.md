@@ -473,3 +473,25 @@ channel, not a real-time execution mechanism.
 
 Python callers may pass an arbitrary concrete `Provider` via
 `alert(..., email_provider=provider)` independently of the Gmail CLI flag.
+
+
+### Order execution notifications
+
+```bash
+uv run schwab monitor order --order-id 123456789 --gmail-notify --stdout
+```
+
+Use the broker order ID (the numeric ID at the end of the Location URL
+reported on submission), not the local position or tracking UUID. This
+read-only command polls the documented individual order endpoint. It does
+not submit, cancel or replace orders. It reports increases in cumulative
+filled quantity, including initial existing fills, with broker execution
+leg prices, quantities, timestamps and order status where available.
+Partial fills continue monitoring; FILLED, CANCELED, REJECTED, EXPIRED
+and REPLACED end monitoring. A terminal order with no fills does not
+send an execution email. Multiple fills between polls are grouped.
+The monitor tracks observed cumulative quantity in memory only; restarting
+can report existing fills again. Replacements and child orders are not
+followed automatically. SMTP failures are logged and not retried.
+Use `--once` to inspect one snapshot, or Ctrl+C to stop monitoring.
+The flag does not change order submission or automatically start a monitor.
