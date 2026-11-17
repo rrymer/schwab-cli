@@ -113,6 +113,14 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_alert.add_argument("--gmail-notify", action="store_true", help="Email triggered alerts via Gmail")
     monitor_alert.add_argument("--once", action="store_true", help="Evaluate only one sample instead of waiting for a trigger")
 
+    monitor_order = monitor_commands.add_parser("order", help="Notify on confirmed order fills")
+    monitor_order.add_argument("--order-id", required=True, type=int, help="Schwab broker order ID")
+    monitor_order.add_argument("--interval", type=float, default=conf.ALERT_POLL_SECONDS)
+    monitor_order.add_argument("--stdout", action="store_true")
+    monitor_order.add_argument("--notify", action="store_true")
+    monitor_order.add_argument("--gmail-notify", action="store_true")
+    monitor_order.add_argument("--once", action="store_true", help="Fetch one order snapshot")
+
     analytics = commands.add_parser("analytics", help="Price history and market indicators")
     analytics_commands = analytics.add_subparsers(dest="analytics_command", required=True)
     calculate = analytics_commands.add_parser("calculate", help="Calculate live position metrics")
@@ -228,6 +236,13 @@ def dispatch(args: argparse.Namespace) -> int:
                 show_technicals=args.technicals,
             )
             return 0
+
+    if args.command == "monitor" and args.monitor_command == "order":
+        from .order_monitor import monitor_order
+
+        monitor_order(args.order_id, interval=args.interval, once=args.once,
+                      stdout=args.stdout, notify=args.notify, gmail_notify=args.gmail_notify)
+        return 0
 
     if args.command == "monitor" and args.monitor_command == "alert":
         from .alerts import alert
