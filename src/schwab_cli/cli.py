@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("init", help="Create ~/.schwab/config.yaml if missing")
+    commands.add_parser("init", help="Create ~/.schwab/config.yaml and positions.sqlite3 if missing")
 
     db = commands.add_parser("db", help="Manage local SQLite storage")
     db_commands = db.add_subparsers(dest="db_command", required=True)
