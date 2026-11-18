@@ -230,10 +230,11 @@ respective API modules.
 
 ### Local configuration (`~/.schwab/config.yaml`)
 
-Run `uv run schwab init` to explicitly create the default configuration without
-contacting Schwab or reading Keychain. If the file already exists, the command
-reports that and leaves it unchanged. The ordinary first-run initialization
-remains available as well.
+Run `uv run schwab init` to initialize the default configuration and configured
+SQLite database without contacting Schwab or reading Keychain. Existing config
+and current databases remain unchanged. Legacy database protection still applies;
+use the explicit backup/relocation and migration workflow below when needed.
+The ordinary first-run initialization remains available as well.
 
 Override application defaults without modifying Python source. On the first
 normal CLI execution, the application creates `~/.schwab/config.yaml` with
