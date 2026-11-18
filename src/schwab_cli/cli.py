@@ -21,6 +21,16 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="Create ~/.schwab/config.yaml if missing")
 
+    db = commands.add_parser("db", help="Manage local SQLite storage")
+    db_commands = db.add_subparsers(dest="db_command", required=True)
+    db_commands.add_parser("init", help="Initialize a new database")
+    db_commands.add_parser("status", help="Show path and schema version")
+    db_commands.add_parser("migrate", help="Apply schema migrations")
+    db_commands.add_parser("schema", help="Print current SQL schema")
+    db_backup = db_commands.add_parser("backup", help="Create a consistent database snapshot")
+    db_backup.add_argument("destination", nargs="?", help="Destination file or directory")
+    db_backup.add_argument("--source", help="Source database path; defaults to DB_PATH")
+
     auth = commands.add_parser("auth", help="Manage Schwab authorization")
     auth_commands = auth.add_subparsers(dest="auth_command", required=True)
     auth_commands.add_parser("login", help="Authorize interactively")
@@ -162,6 +172,24 @@ def dispatch(args: argparse.Namespace) -> int:
         created = conf.ensure_config_file()
         action = "Created" if created else "Already exists (unchanged)"
         print(f"{action}: {conf.CONFIG_PATH}")
+        return 0
+
+    if args.command == "db":
+        import json
+        from . import database
+
+        if args.db_command == "init":
+            version = database.initialize()
+            print(f"Database initialized: {database.default_db_path()} (schema {version})")
+        elif args.db_command == "status":
+            print(json.dumps(database.status(), indent=2))
+        elif args.db_command == "migrate":
+            version = database.migrate()
+            print(f"Database schema version: {version}")
+        elif args.db_command == "schema":
+            print(database.schema_sql(), end="")
+        elif args.db_command == "backup":
+            print(f"Backup created: {database.backup(args.destination, source=args.source)}")
         return 0
 
     if args.command == "auth":
@@ -359,11 +387,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .api import SchwabAPIError
     from .auth import AuthError
     from .integrations import EmailDeliveryError
+    from .database import DatabaseError
+    from sqlite3 import Error as SQLiteError
     try:
         if args.command != "init":
             conf.ensure_config_file()
         return dispatch(args)
-    except (CommandError, ValueError, OSError, SchwabAPIError, AuthError, EmailDeliveryError) as exc:
+    except (CommandError, ValueError, OSError, SchwabAPIError, AuthError, EmailDeliveryError, DatabaseError, SQLiteError) as exc:
         print(f"schwab: {exc}", file=sys.stderr)
         return 1
 
