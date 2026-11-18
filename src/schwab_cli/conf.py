@@ -77,6 +77,12 @@ EMAIL_RECIPIENT = ""
 GMAIL_PASSWORD_ENV = "SCHWAB_GMAIL_APP_PASSWORD"
 KEYCHAIN_SERVICE_GMAIL_APP_PASSWORD = "gmail_app_password"
 
+# SQLite persistence (paths expand ~, relative paths resolve from cwd).
+DB_PATH = "~/.schwab/positions.sqlite3"
+DB_BACKUP_DIR = "~/.schwab/backups"
+DB_TIMEOUT_SECONDS = 15
+DB_JOURNAL_MODE = "WAL"
+
 # Configuration is read through PyYAML safe_load; only scalar settings are accepted.
 # Configuration is loaded once at process import; restart a long-running
 # monitor after modifying ~/.schwab/config.yaml.
@@ -110,6 +116,10 @@ def _validate(name: str, value):
             raise ValueError(f"{name} must be a finite positive number")
     if name in {"REGULAR_SESSION_START_MINUTE", "REGULAR_SESSION_END_MINUTE"} and not (0 <= value <= 1440):
         raise ValueError(f"{name} must be between 0 and 1440")
+    if name == "DB_JOURNAL_MODE" and value not in {"WAL", "DELETE"}:
+        raise ValueError("DB_JOURNAL_MODE must be WAL or DELETE")
+    if name in {"DB_PATH", "DB_BACKUP_DIR"} and ("\x00" in value or value == ":memory:"):
+        raise ValueError(f"{name} must be a filesystem path")
     if name == "HISTORY_PERIOD_TYPE" and value not in {"day", "month", "year", "ytd"}:
         raise ValueError("Invalid HISTORY_PERIOD_TYPE")
     if name == "HISTORY_FREQUENCY_TYPE" and value not in {"minute", "daily", "weekly", "monthly"}:
