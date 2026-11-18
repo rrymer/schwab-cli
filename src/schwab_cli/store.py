@@ -5,44 +5,18 @@ or multi-leg strategies. A fully closed position loses its ID on later re-entry.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
-import sqlite3
 import uuid
 from typing import Any
 
 
-def default_db_path() -> Path:
-    base = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share'))
-    return base / 'schwab-cli' / 'positions.sqlite3'
+from .database import default_db_path, connect
 
 
 class PositionStore:
     def __init__(self, path: str | Path | None = None):
-        self.path = Path(path) if path is not None else default_db_path()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path, timeout=15)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute('PRAGMA busy_timeout=15000')
-        self.db.execute('PRAGMA journal_mode=WAL')
-        self.db.executescript('''
-            CREATE TABLE IF NOT EXISTS positions (
-                id TEXT PRIMARY KEY,
-                instrument_key TEXT NOT NULL,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                last_seen TEXT
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS active_instrument
-                ON positions(instrument_key) WHERE active=1;
-            CREATE TABLE IF NOT EXISTS pending_orders (
-                id TEXT PRIMARY KEY,
-                instrument_key TEXT NOT NULL,
-                schwab_location TEXT,
-                state TEXT NOT NULL DEFAULT 'submitted_unknown',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-        ''')
+        self.path = Path(path).expanduser().resolve() if path is not None else default_db_path()
+        self.db = connect(self.path)
 
     def __enter__(self):
         return self
@@ -89,6 +63,7 @@ class PositionStore:
                 raise ValueError(f'Duplicate Schwab position instrument: {k}')
             seen.add(k)
         with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
             for k in sorted(seen):
                 existing = self.active_id(k)
                 if existing:

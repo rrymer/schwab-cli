@@ -498,3 +498,80 @@ and child orders are not followed. Email failures are logged, not retried.
 If order retrieval fails or the Location is missing/invalid after acceptance,
 a warning is printed; the order may still execute. Never resubmit merely
 because monitoring or email failed.
+
+
+## Local SQLite database
+
+Database configuration is loaded through `conf.py` and optional overrides in
+`~/.schwab/config.yaml`. Existing configuration files are not overwritten;
+missing settings use defaults.
+
+```yaml
+DB_PATH: "~/.schwab/positions.sqlite3"
+DB_BACKUP_DIR: "~/.schwab/backups"
+DB_TIMEOUT_SECONDS: 15
+DB_JOURNAL_MODE: "WAL"
+```
+
+Paths expand ~; relative paths resolve from the process working directory.
+Journal mode supports WAL or DELETE; the timeout controls SQLite lock waits.
+Keep the database on a local filesystem with filesystem locking support.
+
+| Command | Purpose |
+| --- | --- |
+| `schwab db init` | Create a new versioned database (idempotent on current schema) |
+| `schwab db status` | Show resolved path, legacy location, version and journal mode |
+| `schwab db migrate` | Apply/adopt migrations in a transaction |
+| `schwab db schema` | Print the checked-in current SQL schema |
+| `schwab db backup [destination] [--source path]` | Create a consistent snapshot |
+
+Fresh installations still initialize lazily when first using PositionStore.
+Existing unversioned databases must be explicitly migrated; future versions
+are rejected. Schema files are shipped with the package. Version 1 adopts
+the legacy schema without rewriting UUIDs or pending order rows. Migrations
+use SQLite user_version and an immediate transaction. Back up before later
+schema upgrades.
+
+### Upgrade from the original database location
+
+Stop all Schwab CLI workers before relocating. Run `schwab db status` to
+find the old database (XDG_DATA_HOME/schwab-cli/positions.sqlite3,
+otherwise ~/.local/share/schwab-cli/positions.sqlite3). With the default
+new path, run:
+
+```bash
+schwab db backup ~/.schwab/positions.sqlite3 --source ~/.local/share/schwab-cli/positions.sqlite3
+schwab db migrate
+schwab db status
+```
+
+If using XDG_DATA_HOME or a custom DB_PATH, substitute the resolved paths
+shown by status. The old database remains intact. Verify the new database
+before retiring the original; do not run workers against both copies.
+If the configured database is missing and the legacy database exists, the
+application refuses to create a fresh, empty database.
+
+### Backup and relocation
+
+```bash
+schwab db backup
+schwab db backup ~/Documents/schwab-backups/
+schwab db backup ~/Documents/my-copy.sqlite3
+```
+
+An existing directory or path ending in a slash receives a timestamped
+filename. Other paths are treated as explicit filenames. Parent directories
+are created as necessary. SQLite's backup API includes committed WAL data;
+the snapshot is checked for integrity and published without overwriting an
+existing file. Backup publication requires hard-link support on the
+destination filesystem. Backups contain trading state: protect them like
+the original database.
+
+To relocate, stop workers, back up to the new path, update DB_PATH in YAML,
+then run status and migrate before restarting. To recover from a failed
+migration, stop workers, retain the failed database for diagnosis, and
+point DB_PATH at a verified backup (or a fresh copy of it); never overwrite
+a live database. The backup represents a snapshot, not later writes.
+
+See [database schema documentation](docs/database.md) for table and index
+semantics.
