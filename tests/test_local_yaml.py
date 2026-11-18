@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from schwab_cli import auth, conf
+from schwab_cli import auth, conf, database
 from schwab_cli.cli import main
 
 
@@ -106,19 +106,46 @@ POSITION_POLL_SECONDS: 3.5
         from contextlib import redirect_stdout
         from io import StringIO
         from schwab_cli.cli import build_parser
+        from schwab_cli.store import PositionStore
 
         target = Path(self.tmp.name) / ".schwab" / "config.yaml"
+        db_path = target.parent / "positions.sqlite3"
         self.assertEqual(build_parser().parse_args(["init"]).command, "init")
-        with patch.object(conf, "CONFIG_PATH", target), redirect_stdout(StringIO()) as output:
-            self.assertEqual(main(["init"]), 0)
-        self.assertIn("Created", output.getvalue())
-        self.assertTrue(target.exists())
+        with (patch.object(conf, "CONFIG_PATH", target),
+              patch.object(conf, "DB_PATH", str(db_path)),
+              patch.object(database, "legacy_db_path", return_value=target.parent / "legacy.sqlite3")):
+            with redirect_stdout(StringIO()) as output:
+                self.assertEqual(main(["init"]), 0)
+            self.assertIn("Created", output.getvalue())
+            self.assertTrue(target.exists())
+            self.assertTrue(db_path.exists())
+            self.assertEqual(database.status()["schema_version"], database.SCHEMA_VERSION)
+            with PositionStore() as store:
+                tracking = store.reserve_order("EQUITY:AAPL")
+            target.write_text("POSITION_POLL_SECONDS: 33\n", encoding="utf-8")
+            with redirect_stdout(StringIO()) as output:
+                self.assertEqual(main(["init"]), 0)
+            self.assertIn("Already exists", output.getvalue())
+            self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\n")
+            with PositionStore() as store:
+                self.assertIsNotNone(store.pending(tracking))
 
-        target.write_text("POSITION_POLL_SECONDS: 33\\n", encoding="utf-8")
-        with patch.object(conf, "CONFIG_PATH", target), redirect_stdout(StringIO()) as output:
-            self.assertEqual(main(["init"]), 0)
-        self.assertIn("Already exists", output.getvalue())
-        self.assertEqual(target.read_text(encoding="utf-8"), "POSITION_POLL_SECONDS: 33\\n")
+    def test_init_refuses_to_create_database_when_legacy_exists(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from io import StringIO
+
+        target = Path(self.tmp.name) / ".schwab" / "config.yaml"
+        db_path = target.parent / "positions.sqlite3"
+        legacy = Path(self.tmp.name) / "legacy.sqlite3"
+        legacy.touch()
+        with (patch.object(conf, "CONFIG_PATH", target),
+              patch.object(conf, "DB_PATH", str(db_path)),
+              patch.object(database, "legacy_db_path", return_value=legacy),
+              redirect_stdout(StringIO()), redirect_stderr(StringIO()) as errors):
+            self.assertEqual(main(["init"]), 1)
+        self.assertTrue(target.exists())
+        self.assertFalse(db_path.exists())
+        self.assertIn("Legacy database", errors.getvalue())
 
     def test_auth_service_mapping_retains_existing_key_names(self):
         self.assertEqual(auth._KEYCHAIN_SERVICES["client_id"], conf.KEYCHAIN_SERVICE_CLIENT_ID)
