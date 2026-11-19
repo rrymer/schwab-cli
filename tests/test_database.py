@@ -18,7 +18,9 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
+        # macOS temporary directories may be exposed through /var -> /private/var.
+        # Production database paths are canonicalized with resolve().
+        self.root = Path(tmp.name).resolve()
         self.target = self.root / "current.sqlite3"
         self.legacy = self.root / "legacy.sqlite3"
         for name, value in (("DB_PATH", str(self.target)),
