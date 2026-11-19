@@ -172,6 +172,10 @@ def dispatch(args: argparse.Namespace) -> int:
         created = conf.ensure_config_file()
         action = "Created" if created else "Already exists (unchanged)"
         print(f"{action}: {conf.CONFIG_PATH}")
+        from . import database
+
+        version = database.initialize()
+        print(f"Database initialized: {database.default_db_path()} (schema {version})")
         return 0
 
     if args.command == "db":
