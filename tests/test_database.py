@@ -18,9 +18,11 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
-        self.target = (self.root / "current.sqlite3").resolve()
-        self.legacy = (self.root / "legacy.sqlite3").resolve()
+        # macOS temporary directories may be exposed through /var -> /private/var.
+        # Production database paths are canonicalized with resolve().
+        self.root = Path(tmp.name).resolve()
+        self.target = self.root / "current.sqlite3"
+        self.legacy = self.root / "legacy.sqlite3"
         for name, value in (("DB_PATH", str(self.target)),
                             ("DB_BACKUP_DIR", str(self.root / "backups")),
                             ("CONFIG_PATH", self.root / "config.yaml")):
@@ -70,9 +72,9 @@ class DatabaseTests(unittest.TestCase):
     def test_backup_defaults_directory_and_no_overwrite(self):
         with PositionStore() as store:
             original = store.reconcile([position()])["EQUITY:AAPL"]
-            target = (database.backup()).resolve()
-            self.assertEqual(target.parent, (self.root / "backups").resolve())
-            directory = (self.root / "other").resolve()
+            target = database.backup()
+            self.assertEqual(target.parent, self.root / "backups")
+            directory = self.root / "other"
             directory.mkdir()
             second = database.backup(directory)
             self.assertEqual(second.parent, directory)
