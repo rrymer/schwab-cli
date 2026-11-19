@@ -19,8 +19,8 @@ class DatabaseTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.target = self.root / "current.sqlite3"
-        self.legacy = self.root / "legacy.sqlite3"
+        self.target = (self.root / "current.sqlite3").resolve()
+        self.legacy = (self.root / "legacy.sqlite3").resolve()
         for name, value in (("DB_PATH", str(self.target)),
                             ("DB_BACKUP_DIR", str(self.root / "backups")),
                             ("CONFIG_PATH", self.root / "config.yaml")):
@@ -70,9 +70,9 @@ class DatabaseTests(unittest.TestCase):
     def test_backup_defaults_directory_and_no_overwrite(self):
         with PositionStore() as store:
             original = store.reconcile([position()])["EQUITY:AAPL"]
-            target = database.backup()
-            self.assertEqual(target.parent, self.root / "backups")
-            directory = self.root / "other"
+            target = (database.backup()).resolve()
+            self.assertEqual(target.parent, (self.root / "backups").resolve())
+            directory = (self.root / "other").resolve()
             directory.mkdir()
             second = database.backup(directory)
             self.assertEqual(second.parent, directory)
