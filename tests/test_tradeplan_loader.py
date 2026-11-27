@@ -2,7 +2,7 @@
 import unittest
 
 from schwab_cli.tradeplans.contracts import DocumentLoader
-from schwab_cli.tradeplans.yaml_loader import DocumentLoadError, YamlDocumentLoader
+from schwab_cli.tradeplans.loader import DocumentLoadError, YamlDocumentLoader
 
 
 class YamlDocumentLoaderTests(unittest.TestCase):
