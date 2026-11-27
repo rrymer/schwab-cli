@@ -6,6 +6,9 @@ plan compilation and graph validation. Brokerage permissions are never involved.
 from __future__ import annotations
 
 import math
+import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
@@ -127,3 +130,73 @@ class YamlDocumentLoader(DocumentLoader):
         plan = self.compiler.compile(strategy, document)
         self.validator.validate(plan)
         return plan
+
+
+@dataclass(frozen=True)
+class FileDocumentLoader:
+    """Bind a source file to a document parser/TradePlan compiler.
+
+    The path is not opened until load() is invoked. The injected DocumentLoader
+    still accepts source *text*, making both interfaces independently useful.
+    """
+
+    path: Path
+    document_loader: DocumentLoader
+
+    def load(self) -> TradePlan:
+        """Read a bounded UTF-8 file and return a validated TradePlan."""
+        limit = getattr(self.document_loader, "max_bytes", 1_048_576)
+        if type(limit) is not int or limit <= 0:
+            raise ValueError("Document loader max_bytes must be a positive integer")
+        with self.path.open("rb") as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise DocumentLoadError(f"TradePlan file exceeds {limit} bytes: {self.path}")
+        try:
+            source = data.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise DocumentLoadError(f"TradePlan file is not UTF-8: {self.path}") from exc
+        return self.document_loader.load(source)
+
+
+def get_loader(
+    path: str | os.PathLike[str],
+    loader: DocumentLoader | type[DocumentLoader] | str | None = None,
+) -> FileDocumentLoader:
+    """Select and bind a TradePlan loader by file extension or explicit override.
+
+    Examples:
+        plan = get_loader("myplan.yaml").load()
+        plan = get_loader(Path("myplan.yml")).load()
+        plan = get_loader("custom.plan", loader="yaml").load()
+        plan = get_loader("custom.plan", loader=YamlDocumentLoader).load()
+        plan = get_loader("custom.plan", loader=YamlDocumentLoader()).load()
+
+    The function never interprets the path string as YAML source text.
+    """
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError("TradePlan path must be a string or PathLike")
+    raw_path = os.fspath(path)
+    if not isinstance(raw_path, str):
+        raise TypeError("TradePlan paths must be text, not bytes")
+    if not raw_path:
+        raise ValueError("TradePlan path cannot be empty")
+    file_path = Path(raw_path)
+
+    if loader is None:
+        selected = file_path.suffix.lower().removeprefix(".")
+    elif isinstance(loader, str):
+        selected = loader.lower().removeprefix(".")
+    elif isinstance(loader, DocumentLoader):
+        return FileDocumentLoader(file_path, loader)
+    elif isinstance(loader, type) and issubclass(loader, DocumentLoader):
+        return FileDocumentLoader(file_path, loader())
+    else:
+        raise TypeError("loader must be a format name, DocumentLoader class or instance")
+
+    if selected in ("yaml", "yml"):
+        return FileDocumentLoader(file_path, YamlDocumentLoader())
+    raise ValueError(
+        f"Unsupported TradePlan format {selected!r}; "
+        "specify loader='yaml' or provide a DocumentLoader"
+    )
