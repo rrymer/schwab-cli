@@ -145,7 +145,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             path.write_text(VALID, encoding="utf-8")
             with self.assertRaisesRegex(DocumentLoadError, "exceeds"):
                 get_loader(path, loader=YamlDocumentLoader(max_bytes=64)).load()
-            path.write_bytes(b"\\xff\\xfe\\xfa")
+            path.write_bytes(bytes((255, 254, 250)))
             with self.assertRaisesRegex(DocumentLoadError, "UTF-8"):
                 get_loader(path).load()
 
