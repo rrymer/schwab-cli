@@ -1,7 +1,7 @@
 """Safe YAML document loader for TradePlans.
 
-Only syntax and primitive document shape are handled here. qkt vocabulary,
-TradePlans graph semantics and brokerage permissions belong to later stages.
+The public loader orchestrates safe YAML parsing, semantic interpretation,
+plan compilation and graph validation. Brokerage permissions are never involved.
 """
 from __future__ import annotations
 
@@ -10,7 +10,8 @@ from typing import Any, Mapping
 
 import yaml
 
-from .contracts import DocumentLoader
+from .contracts import DocumentLoader, GraphValidator, PlanCompiler, SemanticInterpreter, TradePlan
+from .semantics import AcyclicPlanValidator, QktYamlPlanCompiler, QktYamlSemanticInterpreter
 
 
 class DocumentLoadError(ValueError):
@@ -79,11 +80,10 @@ def _primitive_tree(value: Any, *, max_depth: int, max_nodes: int) -> Any:
 
 
 class YamlDocumentLoader(DocumentLoader):
-    """Deserialize one YAML mapping from *source text*, never from a path.
+    """Produce a validated TradePlan from YAML *text*, never a path.
 
-    Uses PyYAML's safe constructor, rejects duplicate keys, arbitrary tags,
-    non-primitive values, alias cycles and unbounded expanded documents.
-    Nothing here validates qkt action names or TradePlans instructions.
+    Parsing, semantic interpretation, compilation and graph validation remain
+    independently testable strategies. No orders or network calls occur here.
     """
 
     def __init__(
@@ -92,14 +92,20 @@ class YamlDocumentLoader(DocumentLoader):
         max_bytes: int = 1_048_576,
         max_depth: int = 64,
         max_nodes: int = 100_000,
+        interpreter: SemanticInterpreter | None = None,
+        compiler: PlanCompiler | None = None,
+        validator: GraphValidator | None = None,
     ) -> None:
         if any(type(x) is not int or x <= 0 for x in (max_bytes, max_depth, max_nodes)):
             raise ValueError("Loader limits must be positive integers")
         self.max_bytes = max_bytes
         self.max_depth = max_depth
         self.max_nodes = max_nodes
+        self.interpreter = interpreter if interpreter is not None else QktYamlSemanticInterpreter()
+        self.compiler = compiler if compiler is not None else QktYamlPlanCompiler()
+        self.validator = validator if validator is not None else AcyclicPlanValidator()
 
-    def load(self, source: str) -> Mapping[str, Any]:
+    def _parse_mapping(self, source: str) -> Mapping[str, Any]:
         if type(source) is not str:
             raise TypeError("YAML source must be text, not a file path or stream")
         if len(source.encode("utf-8")) > self.max_bytes:
@@ -113,3 +119,11 @@ class YamlDocumentLoader(DocumentLoader):
             raise
         except (yaml.YAMLError, RecursionError, OverflowError) as exc:
             raise DocumentLoadError(f"Invalid YAML document: {exc}") from exc
+
+    def load(self, source: str) -> TradePlan:
+        """Load and validate a typed TradePlan from a supported YAML document."""
+        document = self._parse_mapping(source)
+        strategy = self.interpreter.interpret(document)
+        plan = self.compiler.compile(strategy, document)
+        self.validator.validate(plan)
+        return plan
