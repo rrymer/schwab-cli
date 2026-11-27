@@ -576,3 +576,14 @@ a live database. The backup represents a snapshot, not later writes.
 
 See [database schema documentation](docs/database.md) for table and index
 semantics.
+
+
+### YAML TradePlan CLI entry point (preview only)
+
+Pass a YAML file to the positions command:
+
+```bash
+schwab positions add --plan ./plans/example.yaml
+```
+
+This reads the file with PyYAML's safe loader and prints its source and top-level keys. **It does not yet parse, compile, validate or execute the TradePlan.** The YAML document schema and runtime are still being implemented. For safety, `--plan ... --submit` is explicitly rejected, and YAML plan inputs cannot be mixed with single-leg positional arguments or order flags. Existing `schwab positions add AAPL BUY 1 --price 100` commands continue to work unchanged.
