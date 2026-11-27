@@ -1,8 +1,11 @@
 """Credential-free tests for YAML -> validated, typed TradePlan loading."""
 import unittest
+import tempfile
+from pathlib import Path
 
 from schwab_cli.tradeplans.contracts import DocumentLoader, TradePlan, Operation
 from schwab_cli.tradeplans.loader import DocumentLoadError, YamlDocumentLoader
+from schwab_cli.tradeplans import get_loader
 from schwab_cli.tradeplans.semantics import TradePlanSemanticError
 
 
@@ -91,6 +94,67 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             self.loader.load(b"strategy: x")
         with self.assertRaises(ValueError):
             YamlDocumentLoader(max_nodes=True)
+
+
+    def test_notebook_flow_with_str_and_pathlike(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for ext in (".yaml", ".yml", ".YAML"):
+                path = Path(folder) / ("myplan" + ext)
+                path.write_text(VALID, encoding="utf-8")
+                with self.subTest(ext=ext):
+                    self.assertIsInstance(get_loader(str(path)).load(), TradePlan)
+                    self.assertEqual(get_loader(path).load().identifier, "example")
+
+    def test_explicit_override_selects_loader_for_unknown_extension(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "myplan.plan"
+            path.write_text(VALID, encoding="utf-8")
+            self.assertEqual(get_loader(path, loader="yaml").load().identifier, "example")
+            self.assertEqual(get_loader(path, loader=YamlDocumentLoader).load().identifier, "example")
+            custom = YamlDocumentLoader()
+            self.assertEqual(get_loader(path, loader=custom).load().identifier, "example")
+
+    def test_custom_loader_is_injected_and_receives_file_content(self):
+        class StubLoader(DocumentLoader):
+            def load(self, source: str) -> TradePlan:
+                self.received = source
+                return YamlDocumentLoader().load(source)
+
+        stub = StubLoader()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "anything.custom"
+            path.write_text(VALID, encoding="utf-8")
+            bound = get_loader(path, loader=stub)
+            self.assertFalse(hasattr(stub, "received"))  # factory doesn't read.
+            self.assertEqual(bound.load().identifier, "example")
+            self.assertEqual(stub.received, VALID)
+
+    def test_unknown_extension_bad_override_and_missing_file(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported TradePlan format"):
+            get_loader("myplan.json")
+        with self.assertRaises(TypeError):
+            get_loader("myplan.yaml", loader=object())
+        with self.assertRaises(TypeError):
+            get_loader(b"myplan.yaml")
+        with self.assertRaises(FileNotFoundError):
+            get_loader("unavailable.yaml").load()
+
+    def test_bound_loader_rejects_oversized_and_non_utf8_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "myplan.yaml"
+            path.write_text(VALID, encoding="utf-8")
+            with self.assertRaisesRegex(DocumentLoadError, "exceeds"):
+                get_loader(path, loader=YamlDocumentLoader(max_bytes=64)).load()
+            path.write_bytes(b"\\xff\\xfe\\xfa")
+            with self.assertRaisesRegex(DocumentLoadError, "UTF-8"):
+                get_loader(path).load()
+
+    def test_path_is_never_confused_with_yaml_document_text(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "myplan.yaml"
+            path.write_text(VALID, encoding="utf-8")
+            self.assertNotIsInstance(get_loader(path), TradePlan)
+            self.assertEqual(get_loader(path).load().strategy.name, "put_spread_workflow")
 
     def test_loader_does_not_execute_actions(self):
         plan = self.loader.load(VALID)
