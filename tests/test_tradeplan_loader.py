@@ -74,7 +74,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
         terminal = plan.steps[-1]
         self.assertTrue(terminal.terminal)
         self.assertEqual(terminal.identifier, "END")
-        self.assertEqual(terminal.actions, ())
+        self.assertEqual([action.verb for action in terminal.actions], ["STOP"])
         self.assertEqual(terminal.transitions, ())
 
     def test_stop_may_be_lowercase_but_requires_no_extras(self):
