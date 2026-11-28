@@ -84,12 +84,13 @@ plan:
         next: END
 
     END:
-      type: terminal
+      then:
+        action: STOP
 ```
 
 This can be parsed and validated, but **not executed**. The interpreter
 currently supports a restricted action and expression vocabulary, explicit
-named successors, and terminal blocks. It does not yet implement qkt option
+named successors, and terminal `STOP` actions. A `STOP` block has no `when`, `next`, or extra action fields. It does not yet implement qkt option
 structures, qkt callbacks, full condition semantics, broker execution, or
 runtime safeguards.
 
