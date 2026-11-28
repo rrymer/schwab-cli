@@ -128,3 +128,54 @@ mappings for isolated tests, simulation and future data adapters.
 Live quote streams must specify `timeframe: quote`. Candle timeframes such
 as `1h` are not implemented in this adapter and are rejected rather
 than silently mapped to spot prices.
+
+
+## Typed qkt-inspired action semantics
+
+`Action` remains an abstract interface in `contracts.py`; concrete semantic
+implementations and the YAML compilers are in `semantics.py`. `Trade(Action)`
+is itself abstract and is the common superclass for instrument-targeted
+`Buy`, `Sell`, `Close` and `Resize`. Non-trade actions include
+`Cancel`, `CancelAll`, `CloseAll`, `Flatten`, `Log`,
+`OcoEntry`, and the TradePlan-only terminal `Stop`. More complex qkt
+intent is represented by `OpenOptions` and `Latch`, but neither implies
+implemented multi-leg or conditional execution at Schwab.
+
+`ExpressionCompiler` builds `Literal`/`Reference`/`Operation` objects,
+`ActionCompiler` builds concrete typed actions, and
+`QktYamlPlanCompiler` combines actions and conditions into the finite
+TradePlan graph. They perform no network I/O or order submission.
+
+A BUY entry may specify typed qkt order and sizing clauses:
+
+```yaml
+then:
+  action: BUY
+  target: spy
+  sizing: {unit: USD, value: 1000}
+  order:
+    type: LIMIT
+    limit_price: {ref: spy.close}
+    tif: DAY
+  bracket:
+    stop_loss: 590
+    take_profit: 630
+  next: END
+```
+
+Currently accepted `order.type` values: `MARKET`, `LIMIT`, `STOP`,
+`STOP_LIMIT`, `TRAILING_BY`, `TRAILING_PCT`. Their price fields are
+`limit_price`, `stop_price`, and `trail`, each parsed as an
+`Expression`; `tif` supports `DAY`, `GTC`, `IOC`, `FOK`, or
+`GTD` with a mandatory `until` expression. The YAML names are our
+Python adapter design, **not** an upstream qkt AST serialization format.
+
+`SELL` has upstream qkt short-exposure semantics, **not** the existing
+Schwab CLI `SELL` meaning of selling long holdings. Any later broker adapter
+must resolve position effect explicitly. `CLOSE` is a market flatten in qkt,
+so this compiler does not accept an entry order clause on `CLOSE`.
+
+The monitor merged in #50 remains read-only. This PR **does not enable
+`positions add --plan --submit`**; PR #51 is superseded. Runtime capabilities,
+fill progression, order risk checks, and option structure resolution require
+separate implementation.
