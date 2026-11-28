@@ -109,6 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     monitor_group = commands.add_parser("monitor", help="Monitoring services and alerts")
     monitor_commands = monitor_group.add_subparsers(dest="monitor_command", required=True)
+    monitor_plan = monitor_commands.add_parser(
+        "plan", help="Evaluate TradePlan WHEN conditions (read-only)"
+    )
+    monitor_plan.add_argument("--plan", required=True, metavar="PATH")
+    monitor_plan.add_argument("--step", help="Named step to observe (default: entry)")
+    monitor_plan.add_argument("--interval", type=float, default=conf.ALERT_POLL_SECONDS)
+    monitor_plan.add_argument("--once", action="store_true", help="Evaluate a single snapshot")
+
     monitor_alert = monitor_commands.add_parser(
         "alert", help="Notify when a monitored metric reaches a threshold"
     )
@@ -276,6 +284,27 @@ def dispatch(args: argparse.Namespace) -> int:
                 show_technicals=args.technicals,
             )
             return 0
+
+    if args.command == "monitor" and args.monitor_command == "plan":
+        import json
+        import time
+        from .tradeplans import get_loader
+        from .tradeplans.monitor import observe_step, schwab_snapshot
+
+        if not 0.1 <= args.interval <= 3600:
+            raise CommandError("--interval must be between 0.1 and 3600 seconds")
+        plan = get_loader(args.plan).load()
+        while True:
+            context = schwab_snapshot(plan)
+            observation = observe_step(plan, context, step_name=args.step)
+            print(json.dumps({
+                "plan": observation.plan_id, "step": observation.step,
+                "triggered": observation.triggered, "action": observation.action,
+                "next_step": observation.next_step,
+            }), flush=True)
+            if args.once:
+                return 0
+            time.sleep(args.interval)
 
     if args.command == "monitor" and args.monitor_command == "alert":
         from .alerts import alert
