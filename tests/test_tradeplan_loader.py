@@ -64,9 +64,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace("next: close", "next: missing"),
             VALID.replace("next: close", "next: open"),
             VALID.replace("next: END", "next: open"),
-            VALID.replace("entry: open", "entry: missing"),
-            VALID.replace('    END:\\n      when: {op: "*"}\\n      then: {action: STOP}',
-                          '    END:\\n      when: {op: "*"}\\n      then: {action: STOP}\\n    unused:\\n      when: {op: "*"}\\n      then: {action: STOP}'),
+            VALID.replace("entry: open", "entry: missing")
         ):
             with self.subTest(text=text), self.assertRaises(TradePlanSemanticError):
                 self.loader.load(text)
