@@ -591,9 +591,12 @@ from schwab_cli.tradeplans import get_loader
 plan = get_loader("./plans/example.yaml").load()
 ```
 
-TradePlans use named blocks with `when` and `then`. Terminate a workflow with
-`then: {action: STOP}`; there is no terminal `type` field or terminal-type
-alias normalization. A STOP block has no condition, successor or action options.
+TradePlans use named blocks with `when` and `then`. Every block requires
+`when`. Use `when: {op: "*"}` for unconditional execution and pair it with
+`then: {action: STOP}` to terminate a workflow. The zero-argument `*` condition
+is distinct from two-operand arithmetic multiplication. There is no terminal
+`type` field or terminal-type alias normalization. A STOP block cannot specify
+`next` or additional action arguments.
 The loader safely parses, compiles and validates the finite plan graph.
 No TradePlan orders are submitted, and `--plan ... --submit` is rejected until
 execution safeguards and idempotency are implemented. See
