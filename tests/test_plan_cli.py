@@ -74,16 +74,16 @@ class PlanCliTests(unittest.TestCase):
 
     def test_yaml_terminal_aliases_in_steps_and_nodes(self):
         self.path.write_text(
-            "steps:\\n"
-            "  - id: exit\\n"
-            "    type: end\\n"
-            "  - id: halt\\n"
-            "    type: stop\\n"
-            "nodes:\\n"
-            "  done:\\n"
-            "    type: TERMINAL\\n"
-            "  entry:\\n"
-            "    type: action\\n",
+            "steps:\n"
+            "  - id: exit\n"
+            "    type: end\n"
+            "  - id: halt\n"
+            "    type: stop\n"
+            "nodes:\n"
+            "  done:\n"
+            "    type: TERMINAL\n"
+            "  entry:\n"
+            "    type: action\n",
             encoding="utf-8",
         )
         plan = load_trade_plan(self.path)
