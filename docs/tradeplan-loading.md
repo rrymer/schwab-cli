@@ -152,7 +152,7 @@ schwab monitor plan --plan ./myplan.yaml --interval 5 --submit \
 ```
 
 The live entry condition is evaluated again immediately before attempting
-submission. An order requires a timestamped quote no older than 60 seconds,
+submission. An order requires a fresh quote mark or recent last trade no older than 60 seconds; any live-price WHEN reference must satisfy that same freshness rule. It also requires
 a limit price within 5% of that quote in the unfavorable direction, a
 positive whole-share quantity, and an explicit maximum order notional.
 `SELL` and `CLOSE` additionally require broker-reported long equity
