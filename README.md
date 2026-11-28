@@ -598,6 +598,13 @@ is distinct from two-operand arithmetic multiplication. There is no terminal
 `type` field or terminal-type alias normalization. A STOP block cannot specify
 `next` or additional action arguments.
 The loader safely parses, compiles and validates the finite plan graph.
-No TradePlan orders are submitted, and `--plan ... --submit` is rejected until
-execution safeguards and idempotency are implemented. See
+Read-only preview remains the default. For an explicitly authorized one-shot
+entry order, use `--plan ... --submit --confirm-plan-id ID
+--plan-limit-price PRICE --plan-max-notional USD`. Only fresh-quote,
+single-leg equity BUY/SELL or long-equity CLOSE LIMIT orders are supported.
+`schwab monitor plan --plan ... --submit` can poll the entry condition and
+submit that order once using the same required safeguards. Submissions are
+journaled before the broker POST and are never automatically retried.
+Successful submission means accepted, not filled; DAG successors do not
+execute automatically. Live quote streams require `timeframe: quote`. See
 [TradePlan loading](docs/tradeplan-loading.md) for the current supported subset.
