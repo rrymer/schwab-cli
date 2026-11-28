@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -50,6 +51,9 @@ class PlanOrderJournal:
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Create privately even if the process has a permissive umask.
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        os.close(fd)
         self.db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         self.db.execute("PRAGMA busy_timeout=10000")
         self.db.execute("""
@@ -165,26 +169,33 @@ def _build_guarded_order(plan: TradePlan, *, step: str,
     if selected is None or selected.terminal or len(selected.actions) != 1:
         raise PlanExecutionError("Expected a nonterminal, single-action plan step")
     action = selected.actions[0]
-    if not isinstance(action, ActionCall) or action.verb not in {"BUY", "SELL"}:
-        raise PlanExecutionError("Only explicit equity BUY and SELL are supported for live plans")
+    if not isinstance(action, ActionCall) or action.verb not in {"BUY", "SELL", "CLOSE"}:
+        raise PlanExecutionError("Only equity BUY, SELL and CLOSE are supported for live plans")
     if action.target is None:
         raise PlanExecutionError("Trade action lacks target")
     symbol = _live_stream(plan, action.target)
-    quantity = action.arguments.get("sizing")
-    if type(quantity) is not int or quantity < 1:
-        raise PlanExecutionError("Live sizing must be a positive integer number of shares")
+    if action.verb == "CLOSE":
+        held = _available_shares(symbol)
+        if not held.is_integer() or held <= 0:
+            raise PlanExecutionError("CLOSE requires a positive integral long equity position")
+        quantity = int(held)
+    else:
+        quantity = action.arguments.get("sizing")
+        if type(quantity) is not int or quantity < 1:
+            raise PlanExecutionError("Live sizing must be a positive integer number of shares")
     if limit_price * quantity > max_notional:
         raise PlanExecutionError("Order exceeds explicit maximum notional")
     reference = quote_loader(symbol)
     # Avoid accidental extreme limit prices regardless of order side.
     if action.verb == "BUY" and limit_price > reference * 1.05:
         raise PlanExecutionError("BUY limit price exceeds fresh quote by more than 5%")
-    if action.verb == "SELL" and limit_price < reference * 0.95:
+    if action.verb in {"SELL", "CLOSE"} and limit_price < reference * 0.95:
         raise PlanExecutionError("SELL limit price is more than 5% below fresh quote")
     if action.verb == "SELL" and _available_shares(symbol) < quantity:
         raise PlanExecutionError("Insufficient long shares to SELL without shorting")
     return build_single_order(
-        symbol=symbol, asset_type="EQUITY", instruction=action.verb,
+        symbol=symbol, asset_type="EQUITY",
+        instruction="SELL" if action.verb == "CLOSE" else action.verb,
         quantity=quantity, order_type="LIMIT", price=limit_price,
     )
 
