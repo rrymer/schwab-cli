@@ -158,11 +158,11 @@ class TradePlan:
 
 
 class DocumentLoader(ABC):
-    """Deserialize a document into native Python objects using established libraries."""
+    """Load a complete, validated TradePlan from a source document."""
 
     @abstractmethod
-    def load(self, source: str) -> Mapping[str, Any]:
-        """Parse safely; do not construct executable Python objects."""
+    def load(self, source: str) -> TradePlan:
+        """Parse, interpret, compile and validate a TradePlan without side effects."""
 
 
 class SemanticInterpreter(ABC):
