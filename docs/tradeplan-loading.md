@@ -124,3 +124,49 @@ This early version does not verify exchange timestamps or quote freshness,
 and is **not suitable as a live execution trigger** without additional safeguards.
 The evaluation engine also accepts explicitly supplied immutable context
 mappings for isolated tests, simulation and future data adapters.
+
+
+## Guarded one-shot plan entry submission
+
+The execution branch adds a deliberately narrow first execution capability:
+`BUY`, `SELL`, and long-equity `CLOSE` for an explicit
+`SCHWAB:<ticker>` source, using a **LIMIT** order only.
+`BUY` and `SELL` require positive whole-share `sizing`; `CLOSE`
+uses the broker-reported full long share quantity. Options, short sales,
+nontrivial sizing expressions and multi-leg orders remain unsupported.
+
+A one-shot submission is explicit:
+
+```bash
+schwab positions add --plan ./myplan.yaml --submit \
+  --confirm-plan-id example --plan-limit-price 500 \
+  --plan-max-notional 1000
+```
+
+A foreground, condition-watching submission is also available:
+
+```bash
+schwab monitor plan --plan ./myplan.yaml --interval 5 --submit \
+  --confirm-plan-id example --plan-limit-price 500 \
+  --plan-max-notional 1000
+```
+
+The live entry condition is evaluated again immediately before attempting
+submission. An order requires a timestamped quote no older than 60 seconds,
+a limit price within 5% of that quote in the unfavorable direction, a
+positive whole-share quantity, and an explicit maximum order notional.
+`SELL` and `CLOSE` additionally require broker-reported long equity
+inventory. The monitor does not retry a failed/unknown POST.
+
+A separate private SQLite journal records a **durable claim before the
+network POST**, keyed by plan ID and entry step. It prevents any automatic
+resubmission of that step, even after crashes or timeouts. If submission
+outcome is unknown, **manually reconcile against Schwab orders before
+taking any other trading action**. Broker acceptance is not a fill.
+
+**Important limitations:** Only the entry step may submit. There is no
+automatic successor transition, fill reconciliation, cancellation,
+buying-power preflight, daily cumulative risk budget, or multi-order
+strategy execution yet. Do not use this as an unattended multi-step
+strategy runner. Market data provider timestamps do not by themselves
+guarantee exchange-tradable liquidity.
