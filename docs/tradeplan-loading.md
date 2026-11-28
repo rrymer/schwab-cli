@@ -124,3 +124,7 @@ This early version does not verify exchange timestamps or quote freshness,
 and is **not suitable as a live execution trigger** without additional safeguards.
 The evaluation engine also accepts explicitly supplied immutable context
 mappings for isolated tests, simulation and future data adapters.
+
+Live quote streams must specify `timeframe: quote`. Candle timeframes such
+as `1h` are not implemented in this adapter and are rejected rather
+than silently mapped to spot prices.
