@@ -104,12 +104,24 @@ class ExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(PlanExecutionError, "SCHWAB"):
             submit_plan_entry(plan, **self.options)
 
-    def test_close_not_assumed_to_be_sell(self):
+    @patch("schwab_cli.tradeplans.execution._available_shares", return_value=3.0)
+    def test_close_sells_entire_long_equity_position(self, shares):
         plan = YamlDocumentLoader().load(YAML.replace(
             "action: BUY, target: spy, sizing: 2",
             "action: CLOSE, target: spy"))
-        with self.assertRaisesRegex(PlanExecutionError, "BUY and SELL"):
+        submit_plan_entry(plan, **self.options)
+        leg = self.sent[0]["orderLegCollection"][0]
+        self.assertEqual((leg["instruction"], leg["quantity"]), ("SELL", 3.0))
+        shares.assert_called_once_with("SPY")
+
+    @patch("schwab_cli.tradeplans.execution._available_shares", return_value=0.0)
+    def test_close_without_long_position_is_rejected(self, shares):
+        plan = YamlDocumentLoader().load(YAML.replace(
+            "action: BUY, target: spy, sizing: 2",
+            "action: CLOSE, target: spy"))
+        with self.assertRaisesRegex(PlanExecutionError, "positive integral"):
             submit_plan_entry(plan, **self.options)
+        self.assertEqual(self.sent, [])
 
     @patch("schwab_cli.tradeplans.execution._available_shares", return_value=1)
     def test_sell_cannot_open_short(self, shares):
