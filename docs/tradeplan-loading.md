@@ -100,3 +100,27 @@ Invalid YAML raises `DocumentLoadError`; unsupported semantic forms or
 invalid DAG structure raise `TradePlanSemanticError`; unreadable or missing
 files raise normal filesystem exceptions. File contents are never interpreted
 as Python code.
+
+
+## Read-only WHEN monitoring
+
+```bash
+schwab monitor plan --plan ./myplan.yaml --once
+schwab monitor plan --plan ./myplan.yaml --interval 5
+schwab monitor plan --plan ./myplan.yaml --step close --once
+```
+
+The command polls the current **named** step (entry by default). It prints an
+observation (`triggered`, `action`, and `next_step`) but **never executes,
+advances, or persists** the workflow. Conditions must evaluate to a boolean;
+missing/stale-unavailable inputs are errors, not false confirmations.
+
+Live data references in this initial adapter are deliberately limited:
+`strategy.symbols.<alias>.source: SCHWAB:<ticker>` exposes
+`<alias>.close` (from Schwab's current quote `lastPrice`/mark) and
+`POSITION.<alias>` (net quantity from the single account snapshot).
+`BACKTEST:` streams do **not** silently become live feeds.
+This early version does not verify exchange timestamps or quote freshness,
+and is **not suitable as a live execution trigger** without additional safeguards.
+The evaluation engine also accepts explicitly supplied immutable context
+mappings for isolated tests, simulation and future data adapters.
