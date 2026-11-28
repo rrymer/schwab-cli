@@ -587,3 +587,5 @@ schwab positions add --plan ./plans/example.yaml
 ```
 
 This reads the file with PyYAML's safe loader and prints its source and top-level keys. **It does not yet parse, compile, validate or execute the TradePlan.** The YAML document schema and runtime are still being implemented. For safety, `--plan ... --submit` is explicitly rejected, and YAML plan inputs cannot be mixed with single-leg positional arguments or order flags. Existing `schwab positions add AAPL BUY 1 --price 100` commands continue to work unchanged.
+
+TradePlan node definitions in `nodes` or `steps` may specify `type: terminal`, `type: end`, or `type: stop` interchangeably (case-insensitive). The loader normalizes these to `terminal`; other node types remain unchanged. This is YAML normalization only, not execution support.
