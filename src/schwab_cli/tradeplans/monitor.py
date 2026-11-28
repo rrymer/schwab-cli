@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import operator
+import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -109,7 +110,26 @@ def observe_step(plan: TradePlan, context: Mapping[str, Any], *,
                            step.transitions[0].destination if step.transitions else None)
 
 
-def schwab_snapshot(plan: TradePlan) -> dict[str, float]:
+def fresh_quote_price(quote: dict | None, *, max_age_seconds: float = 60) -> float:
+    """Reject stale quotes and stale last trades before authorizing a live order."""
+    if not isinstance(quote, dict) or not isinstance(quote.get("quote"), dict):
+        raise PlanConditionError("Missing Schwab quote details")
+    details = quote["quote"]
+    now_ms = time.time() * 1000
+    for price_field, timestamp_field in (
+        ("mark", "quoteTimeInLong"),
+        ("lastPrice", "tradeTimeInLong"),
+    ):
+        price = details.get(price_field)
+        timestamp = details.get(timestamp_field)
+        if (type(price) in (int, float) and math.isfinite(price) and price > 0
+            and type(timestamp) in (int, float) and math.isfinite(timestamp)
+            and 0 <= now_ms - timestamp <= max_age_seconds * 1000):
+            return float(price)
+    raise PlanConditionError("No fresh timestamped quote mark or last trade")
+
+
+def schwab_snapshot(plan: TradePlan, *, require_fresh: bool = False) -> dict[str, float]:
     """Fetch only explicitly supported live references, never infer unknown streams.
 
     SCHWAB:<symbol> provides a quote price under <alias>.close.
@@ -166,7 +186,8 @@ def schwab_snapshot(plan: TradePlan) -> dict[str, float]:
     if quote_symbols:
         quotes = get_quotes(list(dict.fromkeys(quote_symbols.values())))
         for alias, symbol in quote_symbols.items():
-            price = quote_price(quotes.get(symbol))
+            price = (fresh_quote_price(quotes.get(symbol)) if require_fresh
+                     else quote_price(quotes.get(symbol)))
             if price is None or not math.isfinite(price) or price <= 0:
                 raise PlanConditionError(f"No valid live quote for {symbol}")
             result[f"{alias}.close"] = price
