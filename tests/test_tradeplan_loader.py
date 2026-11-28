@@ -84,8 +84,8 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace("then: {action: STOP}", "then: {action: STOP, target: spy}"),
             VALID.replace("then: {action: STOP}", "then: {action: STOP, sizing: 1}"),
             VALID.replace("then: {action: STOP}", "then: {action: STOP, message: done}"),
-            VALID.replace("    END:\\n      then: {action: STOP}",
-                          "    END:\\n      when: true\\n      then: {action: STOP}"),
+            VALID.replace("    END:\n      then: {action: STOP}",
+                          "    END:\n      when: true\n      then: {action: STOP}"),
             VALID.replace("then: {action: STOP}", "type: terminal"),
             VALID.replace("then: {action: STOP}", "then: {action: END}"),
         )
