@@ -22,8 +22,7 @@ _OPERATORS = frozenset({
     "AND", "OR", "NOT", "=", "==", "!=", "<", "<=", ">", ">=",
     "+", "-", "*", "/",
 })
-_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG", "END"})
-_TERMINAL_NODE_TYPES = frozenset({"terminal", "end", "stop"})
+_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG", "STOP"})
 
 
 def _mapping(value: Any, label: str) -> dict:
@@ -74,7 +73,7 @@ def _action(raw: Any, aliases: set[str]) -> ActionCall:
         if target not in aliases:
             raise TradePlanSemanticError(f"Unknown action target {target!r}")
     elif target is not None:
-        raise TradePlanSemanticError("LOG cannot specify a target")
+        raise TradePlanSemanticError(f"{verb} cannot specify a target")
     if verb in {"BUY", "SELL"}:
         sizing = data.get("sizing")
         if type(sizing) not in (int, float) or sizing <= 0:
@@ -129,15 +128,6 @@ class QktYamlSemanticInterpreter(SemanticInterpreter):
 class QktYamlPlanCompiler(PlanCompiler):
     """Convert explicit named YAML blocks into a finite TradePlan model."""
 
-    def normalize_node_type(self, value: str) -> str:
-        """Canonicalize terminal node type aliases; preserve other node types."""
-        if not isinstance(value, str):
-            raise ValueError("TradePlan node type must be a string")
-        if value.strip().lower() in _TERMINAL_NODE_TYPES:
-            return "terminal"
-        else:
-            return value
-
     def compile(self, strategy: Strategy, document: Mapping[str, Any]) -> TradePlan:
         raw = _mapping(document.get("plan"), "plan")
         _keys(raw, {"id", "entry", "blocks"}, "plan")
@@ -152,20 +142,16 @@ class QktYamlPlanCompiler(PlanCompiler):
         for name, value in blocks.items():
             _identifier(name, "block name")
             block = _mapping(value, f"block {name}")
-            _keys(block, {"type", "when", "then"}, f"block {name}")
-            print(block.get("type"))
-            block["type"] = self.normalize_node_type(block.get("type"))
-            if block.get("type") == "terminal":
-                if "then" in block or "when" in block:
-                    raise TradePlanSemanticError(f"{name}: terminal cannot have actions")
-                steps.append(PlanStep(name, terminal=True))
-                continue
-            if "type" in block:
-                raise TradePlanSemanticError(f"{name}: unknown block type")
+            _keys(block, {"when", "then"}, f"block {name}")
             then = _mapping(block.get("then"), f"{name}.then")
             _keys(then, {"action", "target", "sizing", "message", "next"}, f"{name}.then")
-            successor = _identifier(then.get("next"), f"{name}.then.next")
             call = _action({key: value for key, value in then.items() if key != "next"}, aliases)
+            if call.verb == "STOP":
+                if "when" in block or "next" in then:
+                    raise TradePlanSemanticError(f"{name}: STOP cannot have when or next")
+                steps.append(PlanStep(name, terminal=True))
+                continue
+            successor = _identifier(then.get("next"), f"{name}.then.next")
             if "when" not in block:
                 raise TradePlanSemanticError(f"{name}: missing when condition")
             condition = _expression(block["when"])
