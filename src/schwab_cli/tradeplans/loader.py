@@ -12,6 +12,32 @@ from typing import Any
 import yaml
 
 
+
+TERMINAL_NODE_TYPES = frozenset({"terminal", "end", "stop"})
+
+
+def normalize_node_type(value: str) -> str:
+    """Canonicalize terminal node type aliases; preserve other node types."""
+    if not isinstance(value, str):
+        raise ValueError("TradePlan node type must be a string")
+    return "terminal" if value.strip().lower() in TERMINAL_NODE_TYPES else value
+
+
+def _normalize_nodes(data: dict[str, Any]) -> None:
+    """Canonicalize only explicit node type fields in supported node collections."""
+    for field in ("nodes", "steps"):
+        nodes = data.get(field)
+        if isinstance(nodes, dict):
+            entries = nodes.values()
+        elif isinstance(nodes, list):
+            entries = nodes
+        else:
+            continue
+        for node in entries:
+            if isinstance(node, dict) and "type" in node:
+                node["type"] = normalize_node_type(node["type"])
+
+
 def load_trade_plan(path: str | Path) -> dict[str, Any]:
     """Safely deserialize a local YAML mapping; never resolve credentials or call Schwab."""
     source = Path(path).expanduser()
@@ -24,6 +50,7 @@ def load_trade_plan(path: str | Path) -> dict[str, Any]:
         raise ValueError("TradePlan YAML must be a nonempty mapping")
     if not all(isinstance(key, str) for key in data):
         raise ValueError("TradePlan YAML top-level keys must be strings")
+    _normalize_nodes(data)
     return data
 
 
