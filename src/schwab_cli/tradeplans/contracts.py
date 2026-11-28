@@ -72,23 +72,6 @@ class Action(ABC):
 
 
 @dataclass(frozen=True)
-class ActionCall(Action):
-    """Unresolved action arguments retained as native Python data."""
-
-    name: str
-    target: str | None = None
-    arguments: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.name or not self.name.strip():
-            raise ValueError("Action name cannot be empty")
-
-    @property
-    def verb(self) -> str:
-        return self.name.upper()
-
-
-@dataclass(frozen=True)
 class Stream:
     alias: str
     source: str

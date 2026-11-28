@@ -3,8 +3,10 @@ import unittest
 from abc import ABC
 from dataclasses import FrozenInstanceError
 
+from schwab_cli.tradeplans.semantics import Buy, SizingSpec
+
 from schwab_cli.tradeplans.contracts import (
-    Action, ActionCall, ActionExecutor, ConditionEvaluator, DocumentLoader,
+    Action, ActionExecutor, ConditionEvaluator, DocumentLoader,
     Expression, GraphValidator, Literal, Operation, PlanCompiler, PlanStep,
     Reference, Rule, SafeguardEvaluator, SemanticInterpreter, Strategy,
     Stream, TradePlan, Transition,
@@ -17,7 +19,7 @@ def sample():
         Operation(">", (Reference("asset.close"), Literal(100))),
         Operation("=", (Reference("POSITION.asset"), Literal(0))),
     ))
-    action = ActionCall("BUY", target="asset", arguments={"sizing": 1})
+    action = Buy(target="asset", sizing=SizingSpec(Literal(1)))
     strategy = Strategy("test", 1, (stream,), (Rule(condition, (action,)),))
     plan = TradePlan("plan-1", strategy, "enter", (
         PlanStep("enter", (action,), (Transition("END"),)),
@@ -55,7 +57,7 @@ class TradePlanContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Reference(" ")
         with self.assertRaises(ValueError):
-            ActionCall(" ")
+            Buy(target=" ", sizing=SizingSpec(Literal(1)))
 
     def test_models_are_frozen_at_top_level(self):
         strategy, plan = sample()
