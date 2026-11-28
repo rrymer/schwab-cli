@@ -122,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_plan.add_argument("--step", help="Named step to observe (default: entry)")
     monitor_plan.add_argument("--interval", type=float, default=conf.ALERT_POLL_SECONDS)
     monitor_plan.add_argument("--once", action="store_true", help="Evaluate a single snapshot")
+    monitor_plan.add_argument("--submit", action="store_true",
+                              help="Submit the entry order once when WHEN becomes true")
+    monitor_plan.add_argument("--plan-limit-price", type=float)
+    monitor_plan.add_argument("--plan-max-notional", type=float)
+    monitor_plan.add_argument("--confirm-plan-id")
 
     monitor_alert = monitor_commands.add_parser(
         "alert", help="Notify when a monitored metric reaches a threshold"
@@ -328,7 +333,23 @@ def dispatch(args: argparse.Namespace) -> int:
 
         if not 0.1 <= args.interval <= 3600:
             raise CommandError("--interval must be between 0.1 and 3600 seconds")
+        if args.submit:
+            if args.step is not None:
+                raise CommandError("Live plan monitor can only submit the entry step")
+            if any(x is None for x in (
+                args.plan_limit_price, args.plan_max_notional, args.confirm_plan_id
+            )):
+                raise CommandError(
+                    "Live plan monitor requires --plan-limit-price, "
+                    "--plan-max-notional and --confirm-plan-id"
+                )
+        elif any(x is not None for x in (
+            args.plan_limit_price, args.plan_max_notional, args.confirm_plan_id
+        )):
+            raise CommandError("Live plan order options require --submit")
         plan = get_loader(args.plan).load()
+        if args.submit and args.confirm_plan_id != plan.identifier:
+            raise CommandError("--confirm-plan-id does not match the loaded plan")
         while True:
             context = schwab_snapshot(plan)
             observation = observe_step(plan, context, step_name=args.step)
@@ -337,6 +358,16 @@ def dispatch(args: argparse.Namespace) -> int:
                 "triggered": observation.triggered, "action": observation.action,
                 "next_step": observation.next_step,
             }), flush=True)
+            if args.submit and observation.triggered:
+                from .tradeplans.execution import submit_plan_entry
+                result = submit_plan_entry(
+                    plan, confirm_plan_id=args.confirm_plan_id,
+                    limit_price=args.plan_limit_price,
+                    max_notional=args.plan_max_notional,
+                )
+                print(json.dumps(result.__dict__, indent=2), flush=True)
+                if result.status != "condition_false":
+                    return 0
             if args.once:
                 return 0
             time.sleep(args.interval)
