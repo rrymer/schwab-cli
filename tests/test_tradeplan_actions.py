@@ -6,7 +6,7 @@ from schwab_cli.tradeplans.contracts import Action, Literal, Operation, Referenc
 from schwab_cli.tradeplans.loader import YamlDocumentLoader
 from schwab_cli.tradeplans.semantics import (
     ActionCompiler, BracketSpec, Buy, Cancel, CancelAll, Close, CloseAll,
-    ExpressionCompiler, Flatten, Log, OcoEntry, OpenOptions, OrderSpec,
+    ExpressionCompiler, Flatten, Latch, Log, OcoEntry, OpenOptions, OrderSpec,
     Resize, Sell, SizingSpec, Stop, Trade, TradePlanSemanticError,
 )
 
@@ -112,6 +112,32 @@ class ConcreteActionTests(unittest.TestCase):
             with self.assertRaises(TradePlanSemanticError):
                 self.compile(action="OCO_ENTRY", entries=entries)
 
+    def test_latch_entry_is_typed_and_unexecuted(self):
+        action = self.compile(
+            action="LATCH", target="spy", offset=0.5, arm="5m",
+            entries=[
+                {"type": "LIMIT", "direction": "RETRACE", "distance": 4,
+                 "sizing": 1, "expire": "2h"},
+                {"type": "MARKET", "target": "qqq", "sizing": 2},
+            ],
+        )
+        self.assertIsInstance(action, Latch)
+        self.assertEqual(action.entries[0].direction, "RETRACE")
+        self.assertEqual(action.entries[1].target, "qqq")
+        for bad in ({"offset": -1}, {"entries": []}, {"arm": ""}):
+            kwargs = dict(action="LATCH", target="spy", offset=0.5, arm="5m",
+                          entries=[{"type": "MARKET", "sizing": 1}])
+            kwargs.update(bad)
+            with self.assertRaises(TradePlanSemanticError):
+                self.compile(**kwargs)
+
+    def test_oco_market_entries_are_rejected(self):
+        with self.assertRaisesRegex(TradePlanSemanticError, "pending"):
+            self.compile(action="OCO_ENTRY", entries=[
+                {"action": "BUY", "target": "spy", "sizing": 1},
+                {"action": "SELL", "target": "spy", "sizing": 1},
+            ])
+
     def test_options_structure_is_typed_but_not_a_broker_order(self):
         action = self.compile(action="OPEN", target="ps", venue="SCHWAB",
                               root="SPX", sizing={"unit": "PCT_RISK", "value": 1},
@@ -134,6 +160,7 @@ class ConcreteActionTests(unittest.TestCase):
             {"action": "BUY", "target": "missing", "sizing": 1},
             {"action": "BUY", "target": "spy"},
             {"action": "BUY", "target": "spy", "sizing": -1},
+            {"action": "BUY", "target": "spy", "sizing": "not-a-size"},
             {"action": "CLOSE", "target": "spy", "sizing": 1},
             {"action": "STOP", "message": "bad"},
             {"action": "LOG", "message": "ok", "level": "TRACE"},
