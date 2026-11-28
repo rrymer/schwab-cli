@@ -114,6 +114,10 @@ def _live_stream(plan: TradePlan, alias: str) -> str:
     if alias not in streams:
         raise PlanExecutionError(f"Unknown action stream: {alias}")
     source = streams[alias].source
+    if streams[alias].timeframe.lower() != "quote":
+        raise PlanExecutionError(
+            "Live equity orders require timeframe: quote; candle bars are not implemented"
+        )
     if not source.startswith("SCHWAB:") or not source[7:]:
         raise PlanExecutionError("Order submission requires an explicit SCHWAB:<symbol> stream")
     symbol = source[7:].strip().upper()
