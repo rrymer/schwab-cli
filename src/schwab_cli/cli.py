@@ -52,12 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     positions_add = positions_commands.add_parser(
         "add",
-        help="Preview or submit a single-leg order",
+        help="Preview a YAML TradePlan or preview/submit a single-leg order",
     )
 
-    positions_add.add_argument("symbol")
-    positions_add.add_argument("instruction")
-    positions_add.add_argument("quantity", type=float)
+    positions_add.add_argument("symbol", nargs="?")
+    positions_add.add_argument("instruction", nargs="?")
+    positions_add.add_argument("quantity", nargs="?", type=float)
+    positions_add.add_argument("--plan", metavar="PATH", help="Path to a YAML TradePlan (preview only)")
 
     positions_add.add_argument(
         "--asset-type",

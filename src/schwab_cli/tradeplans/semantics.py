@@ -22,7 +22,8 @@ _OPERATORS = frozenset({
     "AND", "OR", "NOT", "=", "==", "!=", "<", "<=", ">", ">=",
     "+", "-", "*", "/",
 })
-_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG"})
+_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG", "END"})
+_TERMINAL_NODE_TYPES = frozenset({"terminal", "end", "stop"})
 
 
 def _mapping(value: Any, label: str) -> dict:
@@ -128,6 +129,15 @@ class QktYamlSemanticInterpreter(SemanticInterpreter):
 class QktYamlPlanCompiler(PlanCompiler):
     """Convert explicit named YAML blocks into a finite TradePlan model."""
 
+    def normalize_node_type(self, value: str) -> str:
+        """Canonicalize terminal node type aliases; preserve other node types."""
+        if not isinstance(value, str):
+            raise ValueError("TradePlan node type must be a string")
+        if value.strip().lower() in _TERMINAL_NODE_TYPES:
+            return "terminal"
+        else:
+            return value
+
     def compile(self, strategy: Strategy, document: Mapping[str, Any]) -> TradePlan:
         raw = _mapping(document.get("plan"), "plan")
         _keys(raw, {"id", "entry", "blocks"}, "plan")
@@ -143,6 +153,8 @@ class QktYamlPlanCompiler(PlanCompiler):
             _identifier(name, "block name")
             block = _mapping(value, f"block {name}")
             _keys(block, {"type", "when", "then"}, f"block {name}")
+            print(block.get("type"))
+            block["type"] = self.normalize_node_type(block.get("type"))
             if block.get("type") == "terminal":
                 if "then" in block or "when" in block:
                     raise TradePlanSemanticError(f"{name}: terminal cannot have actions")
