@@ -84,13 +84,15 @@ plan:
         next: END
 
     END:
+      when:
+        op: "*"
       then:
         action: STOP
 ```
 
 This can be parsed and validated, but **not executed**. The interpreter
 currently supports a restricted action and expression vocabulary, explicit
-named successors, and terminal `STOP` actions. A `STOP` block has no `when`, `next`, or extra action fields. It does not yet implement qkt option
+named successors, and terminal `STOP` actions. Every block requires `when`; use `when: {op: "*"}` for unconditional execution. In a `when` clause, zero-argument `*` is the unconditional condition, whereas `*` with two arguments remains multiplication. A `STOP` block must use the unconditional condition and cannot specify `next`, a target, sizing, or a message. It does not yet implement qkt option
 structures, qkt callbacks, full condition semantics, broker execution, or
 runtime safeguards.
 
