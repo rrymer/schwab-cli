@@ -576,3 +576,25 @@ a live database. The backup represents a snapshot, not later writes.
 
 See [database schema documentation](docs/database.md) for table and index
 semantics.
+
+
+### YAML TradePlans (validated preview only)
+
+Use the same YAML parser from the CLI and from notebooks:
+
+```bash
+schwab positions add --plan ./plans/example.yaml
+```
+
+```python
+from schwab_cli.tradeplans import get_loader
+plan = get_loader("./plans/example.yaml").load()
+```
+
+TradePlans use named blocks with `when` and `then`. Terminate a workflow with
+`then: {action: STOP}`; there is no terminal `type` field or terminal-type
+alias normalization. A STOP block has no condition, successor or action options.
+The loader safely parses, compiles and validates the finite plan graph.
+No TradePlan orders are submitted, and `--plan ... --submit` is rejected until
+execution safeguards and idempotency are implemented. See
+[TradePlan loading](docs/tradeplan-loading.md) for the current supported subset.
