@@ -70,6 +70,31 @@ class PlanCliIntegrationTests(unittest.TestCase):
         self.assertEqual(executor.call_args.kwargs["limit_price"], 500)
         self.assertEqual(executor.call_args.kwargs["confirm_plan_id"], "test_plan")
 
+    def test_monitor_can_submit_triggered_entry_once(self):
+        from schwab_cli.tradeplans.execution import SubmissionResult
+        args = build_parser().parse_args([
+            "monitor", "plan", "--plan", str(self.path), "--once", "--submit",
+            "--plan-limit-price", "500", "--plan-max-notional", "1000",
+            "--confirm-plan-id", "test_plan",
+        ])
+        with (patch("schwab_cli.tradeplans.monitor.schwab_snapshot", return_value={}),
+              patch("schwab_cli.tradeplans.execution.submit_plan_entry",
+                    return_value=SubmissionResult("test_plan", "entry",
+                                                  "accepted_not_filled")) as executor,
+              redirect_stdout(io.StringIO())):
+            self.assertEqual(dispatch(args), 0)
+        executor.assert_called_once()
+        self.assertEqual(executor.call_args.kwargs["max_notional"], 1000)
+
+    def test_monitor_submission_rejects_arbitrary_step(self):
+        args = build_parser().parse_args([
+            "monitor", "plan", "--plan", str(self.path), "--submit",
+            "--step", "done", "--plan-limit-price", "500",
+            "--plan-max-notional", "1000", "--confirm-plan-id", "test_plan",
+        ])
+        with self.assertRaisesRegex(CommandError, "entry"):
+            dispatch(args)
+
     def test_mixed_order_arguments_rejected(self):
         for extra in (("AAPL", "BUY", "1"), ("--price", "5"), ("--order-type", "MARKET")):
             with self.subTest(extra=extra), self.assertRaises(CommandError):
