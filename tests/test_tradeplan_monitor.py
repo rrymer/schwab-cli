@@ -14,7 +14,7 @@ strategy:
   name: demo
   version: 1
   symbols:
-    spy: {source: "SCHWAB:SPY", timeframe: "1h"}
+    spy: {source: "SCHWAB:SPY", timeframe: "quote"}
 plan:
   id: demo_plan
   entry: enter
@@ -82,6 +82,12 @@ class ConditionTests(unittest.TestCase):
         ]}}]
         plan = YamlDocumentLoader().load(PLAN.replace("{ref: spy.close}", "{ref: POSITION.spy}"))
         self.assertEqual(schwab_snapshot(plan), {"POSITION.spy": 5})
+
+    def test_candle_timeframe_is_not_silently_treated_as_quote(self):
+        plan = YamlDocumentLoader().load(PLAN.replace('timeframe: "quote"',
+                                                       'timeframe: "1h"'))
+        with self.assertRaisesRegex(PlanConditionError, "timeframe: quote"):
+            schwab_snapshot(plan)
 
     def test_backtest_never_substitutes_live_quote(self):
         plan = YamlDocumentLoader().load(PLAN.replace("SCHWAB:SPY", "BACKTEST:SPY"))
