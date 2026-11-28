@@ -26,7 +26,7 @@ plan:
       when: {op: ">", args: [{ref: POSITION.spy}, 0]}
       then: {action: CLOSE, target: spy, next: END}
     END:
-      type: terminal
+      then: {action: STOP}
 """
 
 
@@ -64,10 +64,34 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace("next: close", "next: open"),
             VALID.replace("next: END", "next: open"),
             VALID.replace("entry: open", "entry: missing"),
-            VALID.replace("    END:\n      type: terminal", "    END:\n      type: terminal\n    unused:\n      type: terminal"),
+            VALID.replace("    END:\n      then: {action: STOP}", "    END:\n      then: {action: STOP}\n    unused:\n      then: {action: STOP}"),
         ):
             with self.subTest(text=text), self.assertRaises(TradePlanSemanticError):
                 self.loader.load(text)
+
+    def test_stop_is_canonical_terminal_action(self):
+        plan = self.loader.load(VALID)
+        terminal = plan.steps[-1]
+        self.assertTrue(terminal.terminal)
+        self.assertEqual(terminal.identifier, "END")
+        self.assertEqual(terminal.actions, ())
+        self.assertEqual(terminal.transitions, ())
+
+    def test_stop_may_be_lowercase_but_requires_no_extras(self):
+        self.assertTrue(self.loader.load(VALID.replace("action: STOP", "action: stop")).steps[-1].terminal)
+        invalid = (
+            VALID.replace("then: {action: STOP}", "then: {action: STOP, next: open}"),
+            VALID.replace("then: {action: STOP}", "then: {action: STOP, target: spy}"),
+            VALID.replace("then: {action: STOP}", "then: {action: STOP, sizing: 1}"),
+            VALID.replace("then: {action: STOP}", "then: {action: STOP, message: done}"),
+            VALID.replace("    END:\\n      then: {action: STOP}",
+                          "    END:\\n      when: true\\n      then: {action: STOP}"),
+            VALID.replace("then: {action: STOP}", "type: terminal"),
+            VALID.replace("then: {action: STOP}", "then: {action: END}"),
+        )
+        for source in invalid:
+            with self.subTest(source=source), self.assertRaises(TradePlanSemanticError):
+                self.loader.load(source)
 
     def test_duplicate_keys_rejected(self):
         with self.assertRaises(DocumentLoadError):
