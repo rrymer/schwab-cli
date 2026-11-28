@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from schwab_cli.cli import build_parser, dispatch
-from schwab_cli.tradeplans.loader import load_trade_plan
+from schwab_cli.tradeplans.loader import load_trade_plan, normalize_node_type
 
 
 class PlanCliTests(unittest.TestCase):
@@ -63,6 +63,33 @@ class PlanCliTests(unittest.TestCase):
                 self.path.write_text(document, encoding="utf-8")
                 with self.assertRaises(ValueError):
                     load_trade_plan(self.path)
+
+    def test_terminal_node_type_aliases(self):
+        for alias in ("terminal", "end", "stop", "END", " Stop "):
+            with self.subTest(alias=alias):
+                self.assertEqual(normalize_node_type(alias), "terminal")
+        self.assertEqual(normalize_node_type("order"), "order")
+        with self.assertRaises(ValueError):
+            normalize_node_type(None)
+
+    def test_yaml_terminal_aliases_in_steps_and_nodes(self):
+        self.path.write_text(
+            "steps:\\n"
+            "  - id: exit\\n"
+            "    type: end\\n"
+            "  - id: halt\\n"
+            "    type: stop\\n"
+            "nodes:\\n"
+            "  done:\\n"
+            "    type: TERMINAL\\n"
+            "  entry:\\n"
+            "    type: action\\n",
+            encoding="utf-8",
+        )
+        plan = load_trade_plan(self.path)
+        self.assertEqual([node["type"] for node in plan["steps"]], ["terminal", "terminal"])
+        self.assertEqual(plan["nodes"]["done"]["type"], "terminal")
+        self.assertEqual(plan["nodes"]["entry"]["type"], "action")
 
     def test_yaml_file_missing(self):
         with self.assertRaises(FileNotFoundError):
