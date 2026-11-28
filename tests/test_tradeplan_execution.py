@@ -16,7 +16,7 @@ strategy:
   name: test
   version: 1
   symbols:
-    spy: {source: "SCHWAB:SPY", timeframe: "1h"}
+    spy: {source: "SCHWAB:SPY", timeframe: "quote"}
 plan:
   id: live_test
   entry: enter
@@ -98,6 +98,12 @@ class ExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(PlanExecutionError, "integer"):
             submit_plan_entry(plan, **self.options)
         self.assertEqual(self.sent, [])
+
+    def test_candle_timeframe_not_accepted_for_live_submission(self):
+        plan = YamlDocumentLoader().load(YAML.replace('timeframe: "quote"',
+                                                       'timeframe: "1h"'))
+        with self.assertRaisesRegex(PlanExecutionError, "timeframe: quote"):
+            submit_plan_entry(plan, **self.options)
 
     def test_nonlive_source_rejected(self):
         plan = YamlDocumentLoader().load(YAML.replace("SCHWAB:SPY", "BACKTEST:SPY"))
