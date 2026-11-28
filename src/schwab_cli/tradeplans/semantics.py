@@ -62,7 +62,6 @@ def _expression(raw: Any) -> Expression:
     return Operation(op, tuple(_expression(arg) for arg in args))
 
 
-
 def _condition(raw: Any) -> Expression:
     """A zero-operand '*' means unconditional execution in a WHEN clause.
 
@@ -108,7 +107,7 @@ def _strategy(document: dict) -> Strategy:
     _keys(data, {"name", "version", "symbols", "parameters"}, "strategy")
     name = _identifier(data.get("name"), "strategy.name")
     version = data.get("version")
-    if type(version) is not int or version < 1:
+    if type(version) is not int or version < 0:
         raise TradePlanSemanticError("strategy.version must be a positive integer")
     symbols = _mapping(data.get("symbols"), "strategy.symbols")
     if not symbols:
