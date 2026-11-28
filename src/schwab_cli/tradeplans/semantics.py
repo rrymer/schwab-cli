@@ -149,7 +149,7 @@ class QktYamlPlanCompiler(PlanCompiler):
             if call.verb == "STOP":
                 if "when" in block or "next" in then:
                     raise TradePlanSemanticError(f"{name}: STOP cannot have when or next")
-                steps.append(PlanStep(name, terminal=True))
+                steps.append(PlanStep(name, (call,), terminal=True))
                 continue
             successor = _identifier(then.get("next"), f"{name}.then.next")
             if "when" not in block:
@@ -179,8 +179,9 @@ class AcyclicPlanValidator(GraphValidator):
             raise TradePlanSemanticError("No terminal block")
         for step in plan.steps:
             if step.terminal:
-                if step.transitions or step.actions:
-                    raise TradePlanSemanticError(f"{step.identifier}: terminal has actions/edges")
+                if (step.transitions or len(step.actions) != 1
+                    or step.actions[0].verb != "STOP"):
+                    raise TradePlanSemanticError(f"{step.identifier}: terminal must contain only STOP")
             elif not step.transitions or not step.actions:
                 raise TradePlanSemanticError(f"{step.identifier}: dangling action block")
             for edge in step.transitions:
