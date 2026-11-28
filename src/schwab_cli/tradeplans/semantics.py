@@ -62,6 +62,20 @@ def _expression(raw: Any) -> Expression:
     return Operation(op, tuple(_expression(arg) for arg in args))
 
 
+
+def _condition(raw: Any) -> Expression:
+    """A zero-operand '*' means unconditional execution in a WHEN clause.
+
+    The regular binary '*' expression remains multiplication.
+    """
+    if type(raw) is dict and raw.get("op") == "*":
+        _keys(raw, {"op", "args"}, "unconditional condition")
+        args = raw.get("args", [])
+        if type(args) is list and not args:
+            return Operation("*", ())
+    return _expression(raw)
+
+
 def _action(raw: Any, aliases: set[str]) -> ActionCall:
     data = _mapping(raw, "action")
     _keys(data, {"action", "target", "sizing", "message"}, "action")
@@ -146,16 +160,18 @@ class QktYamlPlanCompiler(PlanCompiler):
             then = _mapping(block.get("then"), f"{name}.then")
             _keys(then, {"action", "target", "sizing", "message", "next"}, f"{name}.then")
             call = _action({key: value for key, value in then.items() if key != "next"}, aliases)
-            if call.verb == "STOP":
-                if "when" in block or "next" in then:
-                    raise TradePlanSemanticError(f"{name}: STOP cannot have when or next")
-                steps.append(PlanStep(name, (call,), terminal=True))
-                continue
-            successor = _identifier(then.get("next"), f"{name}.then.next")
             if "when" not in block:
                 raise TradePlanSemanticError(f"{name}: missing when condition")
-            condition = _expression(block["when"])
-            steps.append(PlanStep(name, (call,), (Transition(successor),)))
+            condition = _condition(block["when"])
+            if call.verb == "STOP":
+                if "next" in then:
+                    raise TradePlanSemanticError(f"{name}: STOP cannot have next")
+                if condition != Operation("*", ()):
+                    raise TradePlanSemanticError(f"{name}: STOP requires unconditional when: {{op: '*'}}")
+                steps.append(PlanStep(name, (call,), terminal=True))
+            else:
+                successor = _identifier(then.get("next"), f"{name}.then.next")
+                steps.append(PlanStep(name, (call,), (Transition(successor),)))
             rules.append(Rule(condition, (call,)))
         # Preserve rule conditions in the Strategy semantic model.
         resolved_strategy = Strategy(strategy.name, strategy.version, strategy.streams,
