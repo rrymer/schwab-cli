@@ -131,6 +131,23 @@ class ExecutionTests(unittest.TestCase):
         shares.assert_called_once_with("SPY")
         self.assertEqual(self.sent, [])
 
+    def test_submission_default_snapshot_requires_fresh_quotes(self):
+        options = dict(self.options)
+        options.pop("snapshot_loader")
+        with patch("schwab_cli.tradeplans.execution.schwab_snapshot",
+                   return_value={}) as snapshot:
+            submit_plan_entry(self.plan, **options)
+        snapshot.assert_called_once_with(self.plan, require_fresh=True)
+
+    def test_fresh_mark_accepted_and_old_quote_rejected(self):
+        from schwab_cli.tradeplans.monitor import PlanConditionError, fresh_quote_price
+        quote = {"quote": {"mark": 500, "quoteTimeInLong": 1_999}}
+        with patch("schwab_cli.tradeplans.monitor.time.time", return_value=2):
+            self.assertEqual(fresh_quote_price(quote), 500)
+        with patch("schwab_cli.tradeplans.monitor.time.time", return_value=1_000):
+            with self.assertRaises(PlanConditionError):
+                fresh_quote_price(quote)
+
     def test_fresh_quote_fails_when_time_missing(self):
         from schwab_cli.tradeplans.execution import _fresh_quote
         with patch("schwab_cli.quotes.get_quotes", return_value={
