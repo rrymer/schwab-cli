@@ -26,6 +26,7 @@ plan:
       when: {op: ">", args: [{ref: POSITION.spy}, 0]}
       then: {action: CLOSE, target: spy, next: END}
     END:
+      when: {op: "*"}
       then: {action: STOP}
 """
 
@@ -64,7 +65,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace("next: close", "next: open"),
             VALID.replace("next: END", "next: open"),
             VALID.replace("entry: open", "entry: missing"),
-            VALID.replace("    END:\n      then: {action: STOP}", "    END:\n      then: {action: STOP}\n    unused:\n      then: {action: STOP}"),
+            VALID.replace("    END:\n      when: {op: "*"}\n      then: {action: STOP}", "    END:\n      then: {action: STOP}\n    unused:\n      when: {op: "*"}\n      then: {action: STOP}"),
         ):
             with self.subTest(text=text), self.assertRaises(TradePlanSemanticError):
                 self.loader.load(text)
@@ -88,6 +89,33 @@ class YamlDocumentLoaderTests(unittest.TestCase):
                           "    END:\n      when: true\n      then: {action: STOP}"),
             VALID.replace("then: {action: STOP}", "type: terminal"),
             VALID.replace("then: {action: STOP}", "then: {action: END}"),
+        )
+        for source in invalid:
+            with self.subTest(source=source), self.assertRaises(TradePlanSemanticError):
+                self.loader.load(source)
+
+    def test_unconditional_wildcard_preserves_multiplication(self):
+        plan = self.loader.load(VALID)
+        self.assertEqual(plan.strategy.rules[-1].condition, Operation("*", ()))
+        self.assertEqual(plan.strategy.rules[-1].actions[0].verb, "STOP")
+        unconditional = VALID.replace('when: {op: "=", args: [{ref: POSITION.spy}, 0]}',
+                                      'when: {op: "*"}')
+        self.assertEqual(self.loader.load(unconditional).strategy.rules[0].condition,
+                         Operation("*", ()))
+        multiplication = VALID.replace(
+            'when: {op: "=", args: [{ref: POSITION.spy}, 0]}',
+            'when: {op: "*", args: [2, 3]}',
+        )
+        self.assertEqual(len(self.loader.load(multiplication).strategy.rules[0].condition.operands), 2)
+
+    def test_unconditional_wildcard_rejects_invalid_arity_and_missing_when(self):
+        invalid = (
+            VALID.replace('when: {op: "*"}', 'when: {op: "*", args: [1]}'),
+            VALID.replace('when: {op: "*"}', 'when: {op: "*", args: [1, 2]}'),
+            VALID.replace('when: {op: "*"}', 'when: {op: "*", args: "bad"}'),
+            VALID.replace('when: {op: "*"}\\n      then: {action: STOP}',
+                          'then: {action: STOP}'),
+            VALID.replace('when: {op: "*"}', 'when: false'),
         )
         for source in invalid:
             with self.subTest(source=source), self.assertRaises(TradePlanSemanticError):
