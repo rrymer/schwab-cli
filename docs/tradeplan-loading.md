@@ -170,3 +170,7 @@ buying-power preflight, daily cumulative risk budget, or multi-order
 strategy execution yet. Do not use this as an unattended multi-step
 strategy runner. Market data provider timestamps do not by themselves
 guarantee exchange-tradable liquidity.
+
+Live order streams require `source: SCHWAB:<ticker>` and
+`timeframe: quote`. A declared `1h` or other candle timeframe is never
+silently evaluated using a spot quote.
