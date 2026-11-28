@@ -52,11 +52,23 @@ class PlanCliIntegrationTests(unittest.TestCase):
         store.assert_not_called()
         credentials.assert_not_called()
 
-    def test_live_submission_rejected_before_any_broker_call(self):
+    def test_live_submission_requires_explicit_risk_options(self):
         with patch("schwab_cli.orders.submit_order") as submit:
-            with self.assertRaisesRegex(ValueError, "disabled"):
+            with self.assertRaisesRegex(CommandError, "requires"):
                 dispatch(self.args("--submit"))
         submit.assert_not_called()
+
+    def test_live_submission_dispatches_to_guarded_executor_only(self):
+        from schwab_cli.tradeplans.execution import SubmissionResult
+        flags = ("--submit", "--plan-limit-price", "500",
+                 "--plan-max-notional", "1500", "--confirm-plan-id", "test_plan")
+        with patch("schwab_cli.tradeplans.execution.submit_plan_entry",
+                   return_value=SubmissionResult("test_plan", "entry",
+                                                 "accepted_not_filled")) as executor:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(dispatch(self.args(*flags)), 0)
+        self.assertEqual(executor.call_args.kwargs["limit_price"], 500)
+        self.assertEqual(executor.call_args.kwargs["confirm_plan_id"], "test_plan")
 
     def test_mixed_order_arguments_rejected(self):
         for extra in (("AAPL", "BUY", "1"), ("--price", "5"), ("--order-type", "MARKET")):
