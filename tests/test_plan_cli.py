@@ -23,6 +23,7 @@ plan:
       when: true
       then: {action: BUY, target: spy, sizing: 1, next: done}
     done:
+      when: {op: "*"}
       then: {action: STOP}
 """
 
