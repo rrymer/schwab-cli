@@ -18,7 +18,7 @@ from typing import Callable
 from ..database import default_db_path
 from ..orders import SchwabOrder, build_single_order, submit_order
 from .contracts import ActionCall, TradePlan
-from .monitor import observe_step, schwab_snapshot
+from .monitor import PlanConditionError, fresh_quote_price, observe_step, schwab_snapshot
 
 
 class PlanExecutionError(ValueError):
@@ -123,19 +123,14 @@ def _live_stream(plan: TradePlan, alias: str) -> str:
 
 
 def _fresh_quote(symbol: str, *, max_age_seconds: float = 60) -> float:
-    """Require a recent broker timestamp; do not equate stale marks with live prices."""
-    from ..quotes import get_quotes, quote_price
-
-    quote = get_quotes([symbol]).get(symbol)
-    price = quote_price(quote)
-    details = quote.get("quote") if isinstance(quote, dict) else None
-    timestamp = details.get("quoteTimeInLong") if isinstance(details, dict) else None
-    now_ms = time.time() * 1000
-    if (price is None or price <= 0 or not isinstance(timestamp, (int, float))
-        or type(timestamp) is bool or not math.isfinite(timestamp)
-        or not 0 <= now_ms - timestamp <= max_age_seconds * 1000):
-        raise PlanExecutionError(f"No fresh, timestamped Schwab quote for {symbol}")
-    return price
+    """Use only a fresh quote mark or recent last trade for order safeguards."""
+    from ..quotes import get_quotes
+    try:
+        return fresh_quote_price(
+            get_quotes([symbol]).get(symbol), max_age_seconds=max_age_seconds
+        )
+    except PlanConditionError as exc:
+        raise PlanExecutionError(f"No fresh, timestamped Schwab quote for {symbol}") from exc
 
 
 def _available_shares(symbol: str) -> float:
@@ -203,7 +198,7 @@ def _build_guarded_order(plan: TradePlan, *, step: str,
 def submit_plan_entry(
     plan: TradePlan, *, confirm_plan_id: str, limit_price: float,
     max_notional: float, journal_path: str | Path | None = None,
-    snapshot_loader: Callable[[TradePlan], dict] = schwab_snapshot,
+    snapshot_loader: Callable[[TradePlan], dict] | None = None,
     quote_loader: Callable[[str], float] = _fresh_quote,
     sender: Callable[[SchwabOrder], str | None] = submit_order,
 ) -> SubmissionResult:
@@ -214,7 +209,9 @@ def submit_plan_entry(
     """
     if confirm_plan_id != plan.identifier:
         raise PlanExecutionError("--confirm-plan-id must exactly match the loaded plan identifier")
-    observation = observe_step(plan, snapshot_loader(plan))
+    context = (snapshot_loader(plan) if snapshot_loader is not None
+               else schwab_snapshot(plan, require_fresh=True))
+    observation = observe_step(plan, context)
     if not observation.triggered:
         return SubmissionResult(plan.identifier, plan.entry, "condition_false")
     order = _build_guarded_order(
