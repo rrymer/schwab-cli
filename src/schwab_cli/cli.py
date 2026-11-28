@@ -235,6 +235,20 @@ def dispatch(args: argparse.Namespace) -> int:
             return 0
 
         if args.positions_command == "add":
+            if args.plan is not None:
+                if any(value is not None for value in (args.symbol, args.instruction, args.quantity)):
+                    raise CommandError("--plan cannot be combined with symbol, instruction or quantity")
+                if (args.asset_type != conf.DEFAULT_ASSET_TYPE
+                    or args.order_type != conf.DEFAULT_ORDER_TYPE
+                    or args.price is not None
+                    or args.session != conf.DEFAULT_SESSION
+                    or args.duration != conf.DEFAULT_DURATION):
+                    raise CommandError("--plan cannot be combined with single-leg order options")
+                from .tradeplans.utils import preview_trade_plan
+                preview_trade_plan(args.plan, submit=args.submit, gmail_notify=args.gmail_notify)
+                return 0
+            if args.symbol is None or args.instruction is None or args.quantity is None:
+                raise CommandError("positions add requires SYMBOL INSTRUCTION QUANTITY or --plan PATH")
             from .orders import add_position
 
             add_position(
