@@ -58,7 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     positions_add.add_argument("symbol", nargs="?")
     positions_add.add_argument("instruction", nargs="?")
     positions_add.add_argument("quantity", nargs="?", type=float)
-    positions_add.add_argument("--plan", metavar="PATH", help="Path to a YAML TradePlan (preview only)")
+    positions_add.add_argument("--plan", metavar="PATH", help="Path to a YAML TradePlan")
+    positions_add.add_argument("--plan-limit-price", type=float,
+                               help="Required explicit LIMIT price for live plan entry")
+    positions_add.add_argument("--plan-max-notional", type=float,
+                               help="Required dollar cap for live plan entry")
+    positions_add.add_argument("--confirm-plan-id",
+                               help="Required exact plan ID acknowledgement for live submission")
 
     positions_add.add_argument(
         "--asset-type",
@@ -252,9 +258,38 @@ def dispatch(args: argparse.Namespace) -> int:
                     or args.session != conf.DEFAULT_SESSION
                     or args.duration != conf.DEFAULT_DURATION):
                     raise CommandError("--plan cannot be combined with single-leg order options")
-                from .tradeplans.utils import preview_trade_plan
-                preview_trade_plan(args.plan, submit=args.submit, gmail_notify=args.gmail_notify)
+                if args.gmail_notify:
+                    raise CommandError("--gmail-notify is not supported for TradePlan submissions")
+                from .tradeplans import get_loader
+                plan = get_loader(args.plan).load()
+                if args.submit:
+                    if any(x is None for x in (
+                        args.plan_limit_price, args.plan_max_notional, args.confirm_plan_id
+                    )):
+                        raise CommandError(
+                            "Live plan submission requires --plan-limit-price, "
+                            "--plan-max-notional and --confirm-plan-id"
+                        )
+                    from .tradeplans.execution import submit_plan_entry
+                    result = submit_plan_entry(
+                        plan, confirm_plan_id=args.confirm_plan_id,
+                        limit_price=args.plan_limit_price,
+                        max_notional=args.plan_max_notional,
+                    )
+                    import json
+                    print(json.dumps(result.__dict__, indent=2))
+                else:
+                    if any(x is not None for x in (
+                        args.plan_limit_price, args.plan_max_notional, args.confirm_plan_id
+                    )):
+                        raise CommandError("Live plan order options require --submit")
+                    from .tradeplans.utils import preview_trade_plan
+                    preview_trade_plan(args.plan)
                 return 0
+            if any(x is not None for x in (
+                args.plan_limit_price, args.plan_max_notional, args.confirm_plan_id
+            )):
+                raise CommandError("--plan-limit-price/--plan-max-notional/--confirm-plan-id require --plan")
             if args.symbol is None or args.instruction is None or args.quantity is None:
                 raise CommandError("positions add requires SYMBOL INSTRUCTION QUANTITY or --plan PATH")
             from .orders import add_position
