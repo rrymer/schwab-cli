@@ -85,8 +85,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace("then: {action: STOP}", "then: {action: STOP, target: spy}"),
             VALID.replace("then: {action: STOP}", "then: {action: STOP, sizing: 1}"),
             VALID.replace("then: {action: STOP}", "then: {action: STOP, message: done}"),
-            VALID.replace("    END:\n      then: {action: STOP}",
-                          "    END:\n      when: true\n      then: {action: STOP}"),
+            VALID.replace('when: {op: "*"}', "when: true"),
             VALID.replace("then: {action: STOP}", "type: terminal"),
             VALID.replace("then: {action: STOP}", "then: {action: END}"),
         )
@@ -113,7 +112,7 @@ class YamlDocumentLoaderTests(unittest.TestCase):
             VALID.replace('when: {op: "*"}', 'when: {op: "*", args: [1]}'),
             VALID.replace('when: {op: "*"}', 'when: {op: "*", args: [1, 2]}'),
             VALID.replace('when: {op: "*"}', 'when: {op: "*", args: "bad"}'),
-            VALID.replace('when: {op: "*"}\\n      then: {action: STOP}',
+            VALID.replace('when: {op: "*"}\n      then: {action: STOP}',
                           'then: {action: STOP}'),
             VALID.replace('when: {op: "*"}', 'when: false'),
         )
