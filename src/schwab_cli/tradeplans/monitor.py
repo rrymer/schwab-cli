@@ -155,6 +155,11 @@ def schwab_snapshot(plan: TradePlan, *, require_fresh: bool = False) -> dict[str
             if alias not in streams:
                 raise PlanConditionError(f"Unknown quote stream: {alias}")
             source = streams[alias].source
+            if streams[alias].timeframe.lower() != "quote":
+                raise PlanConditionError(
+                    f"Live {alias}.close requires timeframe: quote; "
+                    "candle timeframes are not implemented"
+                )
             if not source.startswith("SCHWAB:") or not source.removeprefix("SCHWAB:"):
                 raise PlanConditionError(f"Live quote requires SCHWAB:<symbol> source: {alias}")
             quote_symbols[alias] = source.removeprefix("SCHWAB:").upper()
