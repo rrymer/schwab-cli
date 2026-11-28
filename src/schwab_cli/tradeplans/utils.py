@@ -1,9 +1,31 @@
 """Utilities for working with TradePlans documents."""
+import json
 import os
 from pathlib import Path
-
 from .contracts import DocumentLoader
 from .loader import YamlDocumentLoader, FileDocumentLoader
+
+
+def preview_trade_plan(path: str | os.PathLike[str], *, submit: bool = False,
+                       gmail_notify: bool = False) -> None:
+    """Validate and preview a plan; never submit orders."""
+    if submit:
+        raise ValueError(
+            "--submit with --plan is disabled: TradePlans execution, "
+            "safeguards and idempotency are not implemented"
+        )
+    if gmail_notify:
+        raise ValueError("--gmail-notify requires a submitted order; plans are preview-only")
+    plan = get_loader(path).load()
+    print(json.dumps({
+        "source": str(Path(path).expanduser()),
+        "plan_id": plan.identifier,
+        "strategy": plan.strategy.name,
+        "entry": plan.entry,
+        "steps": [step.identifier for step in plan.steps],
+        "status": "compiled and graph-validated; not executable",
+    }, indent=2))
+    print("DRY RUN: no order submitted. TradePlan execution is not implemented.")
 
 
 def get_loader(

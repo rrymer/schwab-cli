@@ -22,7 +22,7 @@ _OPERATORS = frozenset({
     "AND", "OR", "NOT", "=", "==", "!=", "<", "<=", ">", ">=",
     "+", "-", "*", "/",
 })
-_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG"})
+_ACTIONS = frozenset({"BUY", "SELL", "CLOSE", "LOG", "STOP"})
 
 
 def _mapping(value: Any, label: str) -> dict:
@@ -62,6 +62,20 @@ def _expression(raw: Any) -> Expression:
     return Operation(op, tuple(_expression(arg) for arg in args))
 
 
+
+def _condition(raw: Any) -> Expression:
+    """A zero-operand '*' means unconditional execution in a WHEN clause.
+
+    The regular binary '*' expression remains multiplication.
+    """
+    if type(raw) is dict and raw.get("op") == "*":
+        _keys(raw, {"op", "args"}, "unconditional condition")
+        args = raw.get("args", [])
+        if type(args) is list and not args:
+            return Operation("*", ())
+    return _expression(raw)
+
+
 def _action(raw: Any, aliases: set[str]) -> ActionCall:
     data = _mapping(raw, "action")
     _keys(data, {"action", "target", "sizing", "message"}, "action")
@@ -73,7 +87,7 @@ def _action(raw: Any, aliases: set[str]) -> ActionCall:
         if target not in aliases:
             raise TradePlanSemanticError(f"Unknown action target {target!r}")
     elif target is not None:
-        raise TradePlanSemanticError("LOG cannot specify a target")
+        raise TradePlanSemanticError(f"{verb} cannot specify a target")
     if verb in {"BUY", "SELL"}:
         sizing = data.get("sizing")
         if type(sizing) not in (int, float) or sizing <= 0:
@@ -142,22 +156,22 @@ class QktYamlPlanCompiler(PlanCompiler):
         for name, value in blocks.items():
             _identifier(name, "block name")
             block = _mapping(value, f"block {name}")
-            _keys(block, {"type", "when", "then"}, f"block {name}")
-            if block.get("type") == "terminal":
-                if "then" in block or "when" in block:
-                    raise TradePlanSemanticError(f"{name}: terminal cannot have actions")
-                steps.append(PlanStep(name, terminal=True))
-                continue
-            if "type" in block:
-                raise TradePlanSemanticError(f"{name}: unknown block type")
+            _keys(block, {"when", "then"}, f"block {name}")
             then = _mapping(block.get("then"), f"{name}.then")
             _keys(then, {"action", "target", "sizing", "message", "next"}, f"{name}.then")
-            successor = _identifier(then.get("next"), f"{name}.then.next")
             call = _action({key: value for key, value in then.items() if key != "next"}, aliases)
             if "when" not in block:
                 raise TradePlanSemanticError(f"{name}: missing when condition")
-            condition = _expression(block["when"])
-            steps.append(PlanStep(name, (call,), (Transition(successor),)))
+            condition = _condition(block["when"])
+            if call.verb == "STOP":
+                if "next" in then:
+                    raise TradePlanSemanticError(f"{name}: STOP cannot have next")
+                if condition != Operation("*", ()):
+                    raise TradePlanSemanticError(f"{name}: STOP requires unconditional when: {{op: '*'}}")
+                steps.append(PlanStep(name, (call,), terminal=True))
+            else:
+                successor = _identifier(then.get("next"), f"{name}.then.next")
+                steps.append(PlanStep(name, (call,), (Transition(successor),)))
             rules.append(Rule(condition, (call,)))
         # Preserve rule conditions in the Strategy semantic model.
         resolved_strategy = Strategy(strategy.name, strategy.version, strategy.streams,
@@ -181,8 +195,9 @@ class AcyclicPlanValidator(GraphValidator):
             raise TradePlanSemanticError("No terminal block")
         for step in plan.steps:
             if step.terminal:
-                if step.transitions or step.actions:
-                    raise TradePlanSemanticError(f"{step.identifier}: terminal has actions/edges")
+                if (step.transitions or len(step.actions) != 1
+                    or step.actions[0].verb != "STOP"):
+                    raise TradePlanSemanticError(f"{step.identifier}: terminal must contain only STOP")
             elif not step.transitions or not step.actions:
                 raise TradePlanSemanticError(f"{step.identifier}: dangling action block")
             for edge in step.transitions:
