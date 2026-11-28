@@ -32,8 +32,9 @@ class SizingSpec:
             raise TradePlanSemanticError(f"Unsupported sizing unit: {self.unit}")
         if not isinstance(self.value, Expression):
             raise TradePlanSemanticError("Sizing value must be an Expression")
-        if isinstance(self.value, Literal) and type(self.value.value) in (int, float):
-            if not isfinite(self.value.value) or self.value.value <= 0:
+        if isinstance(self.value, Literal):
+            if (type(self.value.value) not in (int, float)
+                or not isfinite(self.value.value) or self.value.value <= 0):
                 raise TradePlanSemanticError("Sizing must be finite and positive")
 
 
@@ -179,6 +180,38 @@ class OcoEntry(Action):
     def __post_init__(self) -> None:
         if len(self.entries) != 2 or not all(isinstance(x, (Buy, Sell)) for x in self.entries):
             raise TradePlanSemanticError("OCO_ENTRY requires exactly two BUY/SELL entries")
+        if any(entry.order is None or entry.order.type == "MARKET" for entry in self.entries):
+            raise TradePlanSemanticError("OCO_ENTRY entries must be pending LIMIT/STOP orders")
+
+
+@dataclass(frozen=True)
+class LatchEntry:
+    """A direction-relative entry pending a LATCH breakout confirmation."""
+    target: str
+    order_type: str
+    direction: str | None
+    distance: float | None
+    sizing: SizingSpec
+    expire: str | None = None
+
+
+@dataclass(frozen=True)
+class Latch(Action):
+    """qkt directional trip-wire intent, not a running state machine."""
+    target: str
+    offset: float
+    arm: str
+    entries: tuple[LatchEntry, ...]
+    from_price: Expression | None = None
+    name: str | None = None
+    confirm: str | None = None
+    verb: ClassVar[str] = "LATCH"
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.offset) or self.offset <= 0:
+            raise TradePlanSemanticError("LATCH offset must be positive")
+        if not self.entries:
+            raise TradePlanSemanticError("LATCH requires at least one ENTER")
 
 
 @dataclass(frozen=True)
@@ -323,11 +356,69 @@ class ActionCompiler:
             legs=tuple(legs), sizing=self.sizing(data.get("sizing")),
         )
 
+    def latch(self, data: dict, aliases: set[str]) -> Latch:
+        self.expressions.keys(
+            data, {"action", "target", "offset", "arm", "entries", "from", "name", "confirm"},
+            "LATCH",
+        )
+        target = self._target(data, aliases)
+        offset = data.get("offset")
+        arm = data.get("arm")
+        if type(offset) not in (int, float) or not isfinite(offset) or offset <= 0:
+            raise TradePlanSemanticError("LATCH requires a positive constant offset")
+        if type(arm) is not str or not arm.strip():
+            raise TradePlanSemanticError("LATCH requires an arm duration")
+        entries_raw = data.get("entries")
+        if type(entries_raw) is not list or not entries_raw:
+            raise TradePlanSemanticError("LATCH requires ENTER entries")
+        entries = []
+        for raw in entries_raw:
+            item = self.expressions.mapping(raw, "LATCH ENTER")
+            self.expressions.keys(
+                item, {"target", "type", "direction", "distance", "sizing", "expire"},
+                "LATCH ENTER",
+            )
+            on = item.get("target", target)
+            if type(on) is not str or on not in aliases:
+                raise TradePlanSemanticError("Unknown LATCH entry stream")
+            kind = self.expressions.identifier(item.get("type"), "LATCH entry type").upper()
+            direction = item.get("direction")
+            distance = item.get("distance")
+            if kind not in {"MARKET", "LIMIT", "STOP"}:
+                raise TradePlanSemanticError("LATCH entries must be MARKET, LIMIT or STOP")
+            if kind == "MARKET":
+                if direction is not None or distance is not None:
+                    raise TradePlanSemanticError("MARKET LATCH entry has no direction or distance")
+            else:
+                if direction not in {"WITH", "AGAINST", "RETRACE"} or (
+                    type(distance) not in (int, float) or not isfinite(distance) or distance <= 0
+                ):
+                    raise TradePlanSemanticError("LATCH price requires direction and positive constant distance")
+            if "sizing" not in item:
+                raise TradePlanSemanticError("LATCH ENTER requires sizing")
+            expire = item.get("expire")
+            if expire is not None and (type(expire) is not str or not expire.strip()):
+                raise TradePlanSemanticError("Invalid LATCH entry expiry")
+            entries.append(LatchEntry(
+                target=on, order_type=kind, direction=direction, distance=distance,
+                sizing=self.sizing(item["sizing"]), expire=expire,
+            ))
+        source = self.expressions.compile(data["from"]) if "from" in data else None
+        name = data.get("name")
+        confirm = data.get("confirm")
+        if name is not None:
+            self.expressions.identifier(name, "LATCH name")
+        if confirm is not None and confirm not in {"CLOSE_BEYOND", "TIME_IN_BREACH", "RETEST_HOLD"}:
+            raise TradePlanSemanticError("Unsupported LATCH confirmation type")
+        return Latch(target, float(offset), arm, tuple(entries), source, name, confirm)
+
     def compile(self, raw: Any, aliases: set[str]) -> Action:
         data = self.expressions.mapping(raw, "action")
         verb = self.expressions.identifier(data.get("action"), "action").upper()
         if verb == "OPEN":
             return self.options(data)
+        if verb == "LATCH":
+            return self.latch(data, aliases)
         if verb == "OCO_ENTRY":
             self.expressions.keys(data, {"action", "entries"}, "OCO_ENTRY")
             raw_entries = data.get("entries")
@@ -365,7 +456,7 @@ class ActionCompiler:
 
     def _target(self, data: dict, aliases: set[str]) -> str:
         target = data.get("target")
-        if target not in aliases:
+        if type(target) is not str or target not in aliases:
             raise TradePlanSemanticError(f"Unknown action target {target!r}")
         return target
 
